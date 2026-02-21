@@ -1,4 +1,3 @@
-# File: app/__init__.py
 from flask import Flask
 
 # Initialize the Flask application
