@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SafeRoute | Safety Dashboard</title>
+    <link rel="stylesheet" href="style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Dashboard Specific Styles */
+      body {
+        overflow: hidden; /* Prevents whole page from scrolling */
+      }
+
+      .dashboard-container {
+        display: flex;
+        height: 100vh;
+        padding-top: 70px; /* Space for the navbar */
+      }
+
+      /* Sidebar Controls */
+      .sidebar {
+        width: 320px;
+        background: #1e293b;
+        padding: 2rem;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        overflow-y: auto;
+      }
+
+      .sidebar h3 {
+        font-size: 1.2rem;
+        color: var(--primary);
+        margin-bottom: 0.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 0.5rem;
+      }
+
+      .control-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .control-group label {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+      }
+
+      .control-group select,
+      .control-group input {
+        padding: 0.8rem;
+        background: rgba(15, 23, 42, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: white;
+        border-radius: 8px;
+        font-family: "Inter", sans-serif;
+      }
+
+      .btn-update {
+        background: var(--gradient);
+        color: white;
+        border: none;
+        padding: 1rem;
+        border-radius: 8px;
+        font-weight: bold;
+        cursor: pointer;
+        margin-top: 1rem;
+        transition: opacity 0.3s;
+      }
+
+      .btn-update:hover {
+        opacity: 0.9;
+      }
+
+      /* Map Area */
+      .map-area {
+        flex-grow: 1;
+        background: #0f172a;
+        position: relative;
+      }
+
+      /* The iframe that holds the Folium Map */
+      #folium-map {
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar" style="padding: 1rem 5%">
+      <div class="logo">
+        <i class="fa-solid fa-shield-halved"></i> SafeRoute Dashboard
+      </div>
+      <ul class="nav-links">
+        <li>
+          <a href="index.html"
+            ><i class="fa-solid fa-house"></i> Back to Home</a
+          >
+        </li>
+      </ul>
+    </nav>
+
+    <div class="dashboard-container">
+      <aside class="sidebar">
+        <h3><i class="fa-solid fa-sliders"></i> Map Filters</h3>
+
+        <div class="control-group">
+          <label for="city-select">Select City</label>
+          <select id="city-select">
+            <option value="delhi">Delhi NCR</option>
+            <option value="mumbai">Mumbai</option>
+            <option value="bangalore">Bangalore</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label for="severity-select">Accident Severity</label>
+          <select id="severity-select">
+            <option value="all">All Accidents</option>
+            <option value="fatal">Fatal Only</option>
+            <option value="minor">Minor/Grievous</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label for="cluster-input">Number of Clusters (K)</label>
+          <input type="number" id="cluster-input" value="10" min="1" max="50" />
+        </div>
+
+        <button class="btn-update">
+          <i class="fa-solid fa-rotate-right"></i> Update Map
+        </button>
+
+        <div style="margin-top: auto; padding-top: 2rem">
+          <p style="font-size: 0.8rem; color: #94a3b8">
+            <i class="fa-solid fa-circle-info"></i> Data sourced from OGD
+            Platform India. Last updated: Jan 2026.
+          </p>
+        </div>
+      </aside>
+
+      <main class="map-area">
+        <iframe
+          id="folium-map"
+          src="map.html"
+          title="SafeRoute Interactive Map"
+        ></iframe>
+      </main>
+    </div>
+  </body>
+</html>
