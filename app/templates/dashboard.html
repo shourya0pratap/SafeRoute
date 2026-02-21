@@ -13,6 +13,10 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap"
       rel="stylesheet"
     />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
     <style>
       /* Dashboard Specific Styles */
       body {
@@ -104,9 +108,7 @@
       </div>
       <ul class="nav-links">
         <li>
-          <a href="index.html"
-            ><i class="fa-solid fa-house"></i> Back to Home</a
-          >
+          <a href="/"><i class="fa-solid fa-house"></i> Back to Home</a>
         </li>
       </ul>
     </nav>
