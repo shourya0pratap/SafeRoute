@@ -1,0 +1,5 @@
+flask==3.0.0
+folium==0.20.0
+pandas==3.0.1
+numpy==2.4.2
+scikit-learn==1
