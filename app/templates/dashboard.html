@@ -1,11 +1,14 @@
-{% extends "layout.html" %} {% block title %}SafeRoute | Dashboard{% endblock %}
-{% block head %}
+{% extends "layout.html" %} {% block title %}SafeRoute | Dynamic Dashboard{%
+endblock %} {% block head %}
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+
 <style>
-  /* Dashboard Specific Styles */
   body {
     overflow: hidden;
   }
-
   .dashboard-container {
     display: flex;
     height: 100vh;
@@ -22,7 +25,6 @@
     gap: 1.5rem;
     overflow-y: auto;
   }
-
   .sidebar h3 {
     font-size: 1.2rem;
     color: var(--primary);
@@ -30,7 +32,6 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     padding-bottom: 0.5rem;
   }
-
   .control-group {
     display: flex;
     flex-direction: column;
@@ -40,7 +41,6 @@
     font-size: 0.9rem;
     color: var(--text-muted);
   }
-
   .control-group select,
   .control-group input {
     padding: 0.8rem;
@@ -48,9 +48,7 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: white;
     border-radius: 8px;
-    font-family: "Inter", sans-serif;
   }
-
   .btn-update {
     background: var(--gradient);
     color: white;
@@ -60,11 +58,6 @@
     font-weight: bold;
     cursor: pointer;
     margin-top: 1rem;
-    transition: opacity 0.3s;
-  }
-
-  .btn-update:hover {
-    opacity: 0.9;
   }
 
   .map-area {
@@ -72,10 +65,12 @@
     background: #0f172a;
     position: relative;
   }
-  #folium-map {
+
+  /* The div where Leaflet will inject the map */
+  #live-map {
     width: 100%;
     height: 100%;
-    border: none;
+    background-color: #0f172a;
   }
 </style>
 {% endblock %} {% block content %}
@@ -92,32 +87,91 @@
 
 <div class="dashboard-container">
   <aside class="sidebar">
-    <h3><i class="fa-solid fa-sliders"></i> Map Filters</h3>
-
+    <h3><i class="fa-solid fa-sliders"></i> Live Filters</h3>
     <div class="control-group">
-      <label for="city-select">Select City</label>
+      <label for="city-select">Select Region</label>
       <select id="city-select">
         <option value="delhi">Delhi NCR</option>
-        <option value="mumbai">Mumbai</option>
       </select>
     </div>
-
-    <div class="control-group">
-      <label for="cluster-input">Number of Clusters (K)</label>
-      <input type="number" id="cluster-input" value="10" min="1" max="50" />
-    </div>
-
-    <button class="btn-update">
-      <i class="fa-solid fa-rotate-right"></i> Update Map
+    <button class="btn-update" onclick="fetchClusterData()">
+      <i class="fa-solid fa-rotate-right"></i> Refresh Map Data
     </button>
   </aside>
 
   <main class="map-area">
-    <iframe
-      id="folium-map"
-      src="/map.html"
-      title="SafeRoute Interactive Map"
-    ></iframe>
+    <div id="live-map"></div>
   </main>
 </div>
+{% endblock %} {% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+  // 1. Initialize the Map
+  // Centered roughly on Delhi/Gurugram coordinates
+  var map = L.map("live-map").setView([28.55, 77.2], 11);
+
+  // 2. Add the Dark Mode Tile Layer (CartoDB Dark Matter)
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    attribution: "&copy; CARTO",
+    maxZoom: 19,
+  }).addTo(map);
+
+  // Create a layer group to hold our markers so we can clear them when refreshing
+  var clusterLayer = L.layerGroup().addTo(map);
+
+  // 3. The AJAX Fetch Function
+  function fetchClusterData() {
+    console.log("Fetching live cluster data from Flask API...");
+
+    // Call the Python backend asynchronously
+    fetch("/api/clusters")
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.error) {
+          console.error("Backend Error:", data.error);
+          alert("No data found. Did you run the ML script?");
+          return;
+        }
+
+        // Clear old markers before drawing new ones
+        clusterLayer.clearLayers();
+
+        // Loop through the JSON data and draw markers
+        data.forEach((spot) => {
+          // Determine color based on ML risk level
+          let markerColor = "#10b981"; // Default Green
+          if (spot.Risk_Level === "High") markerColor = "#f43f5e"; // Red
+          if (spot.Risk_Level === "Moderate") markerColor = "#f59e0b"; // Orange
+
+          // Create the Leaflet Circle Marker
+          let circle = L.circleMarker([spot.Latitude, spot.Longitude], {
+            radius: 12,
+            fillColor: markerColor,
+            color: markerColor,
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 0.6,
+          });
+
+          // Build the popup HTML
+          let popupContent = `
+                        <div style="font-family: 'Inter', sans-serif; min-width: 150px;">
+                            <h4 style="margin: 0; color: #333;">Black Spot #${spot.Cluster_ID}</h4>
+                            <p style="margin: 5px 0; color: ${markerColor}; font-weight: bold;">${spot.Risk_Level} Risk Zone</p>
+                            <p style="margin: 0; font-size: 12px; color: #666;">Total Recorded Crashes: ${spot.Total_Crashes}</p>
+                        </div>
+                    `;
+
+          circle.bindPopup(popupContent);
+          circle.addTo(clusterLayer);
+        });
+        console.log("Map updated successfully!");
+      })
+      .catch((error) => console.error("Error fetching data:", error));
+  }
+
+  // 4. Auto-load the data when the page first opens
+  document.addEventListener("DOMContentLoaded", fetchClusterData);
+</script>
 {% endblock %}
