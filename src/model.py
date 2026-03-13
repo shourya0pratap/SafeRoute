@@ -15,13 +15,23 @@ def load_cleaned_data(filepath):
 
 def calculate_risk_score(cluster_data):
     """
-    Calculates a simple risk score based on the number of accidents in a cluster.
-    The ML Engineer can expand this to weight 'Fatal' accidents higher.
+    Advanced Risk Scoring: Factors in Severity Weighting to avoid 
+    penalizing high-volume expressways for minor fender-benders.
     """
-    crash_count = len(cluster_data)
-    if crash_count > 50:
+    # 1. Separate accidents by severity
+    # (Assuming your dataset has a 'Severity' column)
+    fatal_crashes = len(cluster_data[cluster_data['Severity'].str.contains('Fatal', case=False, na=False)])
+    minor_crashes = len(cluster_data[cluster_data['Severity'].str.contains('Minor|Damage', case=False, na=False)])
+    unknown_crashes = len(cluster_data) - (fatal_crashes + minor_crashes)
+    
+    # 2. Apply Severity Weights
+    # Fatal accidents are weighted 5x heavier than minor ones
+    weighted_score = (fatal_crashes * 5) + (minor_crashes * 1) + (unknown_crashes * 2)
+    
+    # 3. Determine Risk Tier based on the Weighted Score, not just volume
+    if weighted_score >= 40:
         return "High"
-    elif crash_count > 20:
+    elif weighted_score >= 15:
         return "Moderate"
     else:
         return "Low"
