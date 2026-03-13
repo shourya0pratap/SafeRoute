@@ -95,29 +95,17 @@ endblock %} {% block head %}
   <aside class="sidebar">
     <h3><i class="fa-solid fa-route"></i> Route Planner</h3>
 
-    <div class="control-group">
-      <label for="start-lat">Origin (Latitude, Longitude)</label>
-      <input
-        type="text"
-        id="start-coords"
-        value="14.7240, 78.6103"
-        placeholder="e.g. 14.72, 78.61"
-      />
-    </div>
+<div class="control-group">
+    <label for="start-location">Origin</label>
+    <input type="text" id="start-location" value="Gurgaon" placeholder="e.g. Gurgaon">
+</div>
 
-    <div class="control-group">
-      <label for="end-lat">Destination (Latitude, Longitude)</label>
-      <input
-        type="text"
-        id="end-coords"
-        value="14.7623, 78.5340"
-        placeholder="e.g. 14.76, 78.53"
-      />
-    </div>
+<div class="control-group">
+    <label for="end-location">Destination</label>
+    <input type="text" id="end-location" value="Sohna" placeholder="e.g. Sohna">
+</div>
 
-    <button class="btn-update" onclick="calculateSafeRoute()">
-      <i class="fa-solid fa-location-arrow"></i> Find Safest Route
-    </button>
+<button class="btn-update" onclick="geocodeAndRoute()"><i class="fa-solid fa-location-arrow"></i> Find Safest Route</button>
 
     <div
       id="route-stats"
