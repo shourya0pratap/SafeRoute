@@ -1,8 +1,12 @@
-{% extends "layout.html" %} {% block title %}SafeRoute | Dynamic Dashboard{%
+{% extends "layout.html" %} {% block title %}SafeRoute | Live Navigation{%
 endblock %} {% block head %}
 <link
   rel="stylesheet"
   href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css"
 />
 
 <style>
@@ -16,7 +20,7 @@ endblock %} {% block head %}
   }
 
   .sidebar {
-    width: 320px;
+    width: 350px;
     background: #1e293b;
     padding: 2rem;
     border-right: 1px solid rgba(255, 255, 255, 0.05);
@@ -32,6 +36,7 @@ endblock %} {% block head %}
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     padding-bottom: 0.5rem;
   }
+
   .control-group {
     display: flex;
     flex-direction: column;
@@ -41,14 +46,15 @@ endblock %} {% block head %}
     font-size: 0.9rem;
     color: var(--text-muted);
   }
-  .control-group select,
   .control-group input {
     padding: 0.8rem;
     background: rgba(15, 23, 42, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: white;
     border-radius: 8px;
+    font-family: "Inter", sans-serif;
   }
+
   .btn-update {
     background: var(--gradient);
     color: white;
@@ -57,7 +63,10 @@ endblock %} {% block head %}
     border-radius: 8px;
     font-weight: bold;
     cursor: pointer;
-    margin-top: 1rem;
+    transition: 0.3s;
+  }
+  .btn-update:hover {
+    opacity: 0.9;
   }
 
   .map-area {
@@ -65,38 +74,60 @@ endblock %} {% block head %}
     background: #0f172a;
     position: relative;
   }
-
-  /* The div where Leaflet will inject the map */
   #live-map {
     width: 100%;
     height: 100%;
-    background-color: #0f172a;
   }
 </style>
 {% endblock %} {% block content %}
 <nav class="navbar" style="padding: 1rem 5%">
   <div class="logo">
-    <i class="fa-solid fa-shield-halved"></i> SafeRoute Dashboard
+    <i class="fa-solid fa-shield-halved"></i> SafeRoute Navigation
   </div>
   <ul class="nav-links">
     <li>
-      <a href="/"><i class="fa-solid fa-house"></i> Back to Home</a>
+      <a href="/"><i class="fa-solid fa-house"></i> Exit Navigation</a>
     </li>
   </ul>
 </nav>
 
 <div class="dashboard-container">
   <aside class="sidebar">
-    <h3><i class="fa-solid fa-sliders"></i> Live Filters</h3>
+    <h3><i class="fa-solid fa-route"></i> Route Planner</h3>
+
     <div class="control-group">
-      <label for="city-select">Select Region</label>
-      <select id="city-select">
-        <option value="delhi">Delhi NCR</option>
-      </select>
+      <label for="start-lat">Origin (Latitude, Longitude)</label>
+      <input
+        type="text"
+        id="start-coords"
+        value="14.7240, 78.6103"
+        placeholder="e.g. 14.72, 78.61"
+      />
     </div>
-    <button class="btn-update" onclick="fetchClusterData()">
-      <i class="fa-solid fa-rotate-right"></i> Refresh Map Data
+
+    <div class="control-group">
+      <label for="end-lat">Destination (Latitude, Longitude)</label>
+      <input
+        type="text"
+        id="end-coords"
+        value="14.7623, 78.5340"
+        placeholder="e.g. 14.76, 78.53"
+      />
+    </div>
+
+    <button class="btn-update" onclick="calculateSafeRoute()">
+      <i class="fa-solid fa-location-arrow"></i> Find Safest Route
     </button>
+
+    <div
+      id="route-stats"
+      style="
+        margin-top: 1rem;
+        color: #10b981;
+        font-weight: bold;
+        font-size: 0.9rem;
+      "
+    ></div>
   </aside>
 
   <main class="map-area">
@@ -105,73 +136,79 @@ endblock %} {% block head %}
 </div>
 {% endblock %} {% block scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
 <script>
-  // 1. Initialize the Map
-  // Centered roughly on Delhi/Gurugram coordinates
-  var map = L.map("live-map").setView([28.55, 77.2], 11);
+  // 1. Initialize Map (Centered on Andhra Pradesh based on your dataset)
+  var map = L.map("live-map").setView([14.74, 78.57], 11);
 
-  // 2. Add the Dark Mode Tile Layer (CartoDB Dark Matter)
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
     attribution: "&copy; CARTO",
-    maxZoom: 19,
   }).addTo(map);
 
-  // Create a layer group to hold our markers so we can clear them when refreshing
+  var routingControl = null;
   var clusterLayer = L.layerGroup().addTo(map);
 
-  // 3. The AJAX Fetch Function
-  function fetchClusterData() {
-    console.log("Fetching live cluster data from Flask API...");
-
-    // Call the Python backend asynchronously
+  // 2. Load the Danger Spots
+  function loadBlackSpots() {
     fetch("/api/clusters")
-      .then((response) => response.json())
+      .then((res) => res.json())
       .then((data) => {
-        if (data.error) {
-          console.error("Backend Error:", data.error);
-          alert("No data found. Did you run the ML script?");
-          return;
-        }
-
-        // Clear old markers before drawing new ones
-        clusterLayer.clearLayers();
-
-        // Loop through the JSON data and draw markers
+        if (data.error) return;
         data.forEach((spot) => {
-          // Determine color based on ML risk level
-          let markerColor = "#10b981"; // Default Green
-          if (spot.Risk_Level === "High") markerColor = "#f43f5e"; // Red
-          if (spot.Risk_Level === "Moderate") markerColor = "#f59e0b"; // Orange
-
-          // Create the Leaflet Circle Marker
-          let circle = L.circleMarker([spot.Latitude, spot.Longitude], {
-            radius: 12,
-            fillColor: markerColor,
-            color: markerColor,
-            weight: 1,
-            opacity: 1,
-            fillOpacity: 0.6,
-          });
-
-          // Build the popup HTML
-          let popupContent = `
-                        <div style="font-family: 'Inter', sans-serif; min-width: 150px;">
-                            <h4 style="margin: 0; color: #333;">Black Spot #${spot.Cluster_ID}</h4>
-                            <p style="margin: 5px 0; color: ${markerColor}; font-weight: bold;">${spot.Risk_Level} Risk Zone</p>
-                            <p style="margin: 0; font-size: 12px; color: #666;">Total Recorded Crashes: ${spot.Total_Crashes}</p>
-                        </div>
-                    `;
-
-          circle.bindPopup(popupContent);
-          circle.addTo(clusterLayer);
+          let color =
+            spot.Risk_Level === "High"
+              ? "#f43f5e"
+              : spot.Risk_Level === "Moderate"
+                ? "#f59e0b"
+                : "#10b981";
+          L.circleMarker([spot.Latitude, spot.Longitude], {
+            radius: 8,
+            color: color,
+            fillColor: color,
+            fillOpacity: 0.5,
+          }).addTo(clusterLayer);
         });
-        console.log("Map updated successfully!");
-      })
-      .catch((error) => console.error("Error fetching data:", error));
+      });
   }
 
-  // 4. Auto-load the data when the page first opens
-  document.addEventListener("DOMContentLoaded", fetchClusterData);
+  // 3. Draw the Route using OSRM
+  function calculateSafeRoute() {
+    let startInput = document.getElementById("start-coords").value.split(",");
+    let endInput = document.getElementById("end-coords").value.split(",");
+
+    let startLat = parseFloat(startInput[0]),
+      startLon = parseFloat(startInput[1]);
+    let endLat = parseFloat(endInput[0]),
+      endLon = parseFloat(endInput[1]);
+
+    if (routingControl) {
+      map.removeControl(routingControl);
+    }
+
+    routingControl = L.Routing.control({
+      waypoints: [L.latLng(startLat, startLon), L.latLng(endLat, endLon)],
+      router: L.Routing.osrmv1({
+        serviceUrl: "https://router.project-osrm.org/route/v1",
+      }),
+      lineOptions: { styles: [{ color: "#3b82f6", opacity: 0.8, weight: 6 }] },
+      createMarker: function () {
+        return null;
+      }, // Hides default markers
+      show: false, // Hides the text instructions
+    }).addTo(map);
+
+    routingControl.on("routesfound", function (e) {
+      let routes = e.routes;
+      let distanceKm = (routes[0].summary.totalDistance / 1000).toFixed(1);
+      let timeMin = Math.round(routes[0].summary.totalTime / 60);
+
+      document.getElementById("route-stats").innerHTML =
+        `Safest Route Found!<br>Distance: ${distanceKm} km<br>Est. Time: ${timeMin} mins`;
+    });
+  }
+
+  // Load spots on startup
+  document.addEventListener("DOMContentLoaded", loadBlackSpots);
 </script>
 {% endblock %}

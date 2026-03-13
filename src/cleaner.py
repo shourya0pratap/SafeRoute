@@ -7,7 +7,6 @@ def load_data(filepath):
     try:
         df = pd.read_csv(filepath)
         
-        # Rename columns to match what our ML model expects
         df = df.rename(columns={
             'latitude': 'Latitude',
             'longitude': 'Longitude',
@@ -68,7 +67,6 @@ def run_cleaning_pipeline(input_file, output_file):
     df = normalize_data(df)
     
     # FILTER FOR DELHI NCR BOUNDING BOX
-    # If you want to analyze the Andhra Pradesh data instead, change these!
     delhi_lat_bounds = (28.40, 28.88)
     delhi_lon_bounds = (76.83, 77.34)
     df = filter_city_limits(df, delhi_lat_bounds, delhi_lon_bounds)
@@ -81,8 +79,8 @@ def run_cleaning_pipeline(input_file, output_file):
 if __name__ == "__main__":
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     
-    # Point this directly to the file you just uploaded!
-    raw_data_path = os.path.join(base_dir, 'AccidentsBig.csv') 
+    # Point this directly to the csv file
+    raw_data_path = os.path.join(base_dir, 'data', 'raw', 'AccidentsBig.csv')
     processed_data_path = os.path.join(base_dir, 'data', 'processed', 'accidents_clean.csv')
     
     run_cleaning_pipeline(raw_data_path, processed_data_path)
