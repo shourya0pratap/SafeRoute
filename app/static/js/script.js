@@ -60,3 +60,67 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 });
+
+async function geocodeAndRoute() {
+  let startText = document.getElementById("start-location").value;
+  let endText = document.getElementById("end-location").value;
+
+  document.getElementById("route-stats").innerHTML =
+    "Calculating coordinates...";
+
+  try {
+    // Fetch coordinates for Origin
+    let startRes = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${startText}`,
+    );
+    let startData = await startRes.json();
+
+    // Fetch coordinates for Destination
+    let endRes = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${endText}`,
+    );
+    let endData = await endRes.json();
+
+    if (startData.length === 0 || endData.length === 0) {
+      alert(
+        "Could not find one of the locations. Please try adding the state or country.",
+      );
+      return;
+    }
+
+    let startLat = parseFloat(startData[0].lat),
+      startLon = parseFloat(startData[0].lon);
+    let endLat = parseFloat(endData[0].lat),
+      endLon = parseFloat(endData[0].lon);
+
+    // Remove old route if it exists
+    if (routingControl) {
+      map.removeControl(routingControl);
+    }
+
+    // Draw the new route using the fetched coordinates
+    routingControl = L.Routing.control({
+      waypoints: [L.latLng(startLat, startLon), L.latLng(endLat, endLon)],
+      router: L.Routing.osrmv1({
+        serviceUrl: "https://router.project-osrm.org/route/v1",
+      }),
+      lineOptions: { styles: [{ color: "#3b82f6", opacity: 0.8, weight: 6 }] },
+      createMarker: function () {
+        return null;
+      },
+      show: false,
+    }).addTo(map);
+
+    routingControl.on("routesfound", function (e) {
+      let routes = e.routes;
+      let distanceKm = (routes[0].summary.totalDistance / 1000).toFixed(1);
+      let timeMin = Math.round(routes[0].summary.totalTime / 60);
+
+      document.getElementById("route-stats").innerHTML =
+        `Route Found!<br>Distance: ${distanceKm} km<br>Est. Time: ${timeMin} mins`;
+    });
+  } catch (error) {
+    console.error("Geocoding failed:", error);
+    document.getElementById("route-stats").innerHTML = "Routing failed.";
+  }
+}
