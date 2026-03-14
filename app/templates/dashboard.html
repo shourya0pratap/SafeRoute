@@ -95,17 +95,29 @@ endblock %} {% block head %}
   <aside class="sidebar">
     <h3><i class="fa-solid fa-route"></i> Route Planner</h3>
 
-<div class="control-group">
-    <label for="start-location">Origin</label>
-    <input type="text" id="start-location" value="Gurgaon" placeholder="e.g. Gurgaon">
-</div>
+    <div class="control-group">
+      <label for="start-location">Origin</label>
+      <input
+        type="text"
+        id="start-location"
+        value="Gurgaon"
+        placeholder="e.g. Gurgaon"
+      />
+    </div>
 
-<div class="control-group">
-    <label for="end-location">Destination</label>
-    <input type="text" id="end-location" value="Sohna" placeholder="e.g. Sohna">
-</div>
+    <div class="control-group">
+      <label for="end-location">Destination</label>
+      <input
+        type="text"
+        id="end-location"
+        value="Sohna"
+        placeholder="e.g. Sohna"
+      />
+    </div>
 
-<button class="btn-update" onclick="geocodeAndRoute()"><i class="fa-solid fa-location-arrow"></i> Find Safest Route</button>
+    <button class="btn-update" onclick="geocodeAndRoute()">
+      <i class="fa-solid fa-location-arrow"></i> Find Safest Route
+    </button>
 
     <div
       id="route-stats"
@@ -186,13 +198,56 @@ endblock %} {% block head %}
       show: false, // Hides the text instructions
     }).addTo(map);
 
-    routingControl.on("routesfound", function (e) {
+    routingControl.on("routesfound", async function (e) {
       let routes = e.routes;
       let distanceKm = (routes[0].summary.totalDistance / 1000).toFixed(1);
       let timeMin = Math.round(routes[0].summary.totalTime / 60);
 
+      // Show a loading state while Python does the heavy lifting
       document.getElementById("route-stats").innerHTML =
-        `Safest Route Found!<br>Distance: ${distanceKm} km<br>Est. Time: ${timeMin} mins`;
+        `Route Found!<br>Distance: ${distanceKm} km<br>Est. Time: ${timeMin} mins<br>
+                 <span style="color: #3b82f6;">Analyzing Route Safety <i class="fa-solid fa-spinner fa-spin"></i></span>`;
+
+      // 1. Extract the GPS coordinates of the blue line
+      // Leaflet uses {lat, lng}, our Python script expects {lat, lon}
+      let routeCoords = routes[0].coordinates.map((c) => ({
+        lat: c.lat,
+        lon: c.lng,
+      }));
+
+      // 2. Send the coordinates to Flask
+      try {
+        let response = await fetch("/api/evaluate_route", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ waypoints: routeCoords }),
+        });
+
+        let safetyData = await response.json();
+
+        // 3. Determine text color based on danger level
+        let statusColor = "#10b981"; // Green
+        if (safetyData.status === "High Risk Zone") statusColor = "#f43f5e"; // Red
+        if (safetyData.status === "Moderate Caution") statusColor = "#f59e0b"; // Orange
+
+        // 4. Update the UI with the final Safety Score!
+        document.getElementById("route-stats").innerHTML = `
+                    Route Found!<br>
+                    Distance: ${distanceKm} km<br>
+                    Est. Time: ${timeMin} mins<br><br>
+                    <div style="padding: 10px; background: rgba(0,0,0,0.2); border-left: 4px solid ${statusColor}; border-radius: 4px;">
+                        <span style="color: ${statusColor}; font-weight: bold;">
+                            <i class="fa-solid fa-triangle-exclamation"></i> ${safetyData.status}
+                        </span><br>
+                        <span style="color: #cbd5e1; font-size: 0.85rem;">
+                            Risk Penalty: ${safetyData.penalty_score}<br>
+                            Black Spots Crossed: ${safetyData.black_spots_intersected}
+                        </span>
+                    </div>
+                `;
+      } catch (error) {
+        console.error("Safety evaluation failed:", error);
+      }
     });
   }
 
