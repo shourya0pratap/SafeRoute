@@ -4,7 +4,6 @@ import pandas as pd
 def haversine_distance(lat1, lon1, lat2, lon2):
     """
     Calculates the great-circle distance between two GPS points in meters.
-    This is much more accurate than straight-line Euclidean distance on a globe.
     """
     R = 6371000  # Radius of Earth in meters
     
@@ -57,5 +56,3 @@ def calculate_route_risk(route_waypoints, centroids_df, danger_radius_meters=500
                     
     return total_risk_penalty, len(encountered_spots)
 
-# Example Usage for your backend:
-# penalty_score, spots_hit = calculate_route_risk(osrm_route_data, pd.read_csv('cluster_centroids.csv'))
