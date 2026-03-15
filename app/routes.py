@@ -74,3 +74,58 @@ def evaluate_route():
         
     except FileNotFoundError:
         return jsonify({"error": "Centroids file not found."}), 404
+
+import sqlite3
+
+# --- LIVE CROWDSOURCING DATABASE ---
+
+def init_db():
+    """Creates a local SQLite database file to store user reports."""
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    db_path = os.path.join(base_dir, 'data', 'live_reports.db')
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lat REAL,
+            lon REAL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# Run this instantly when the Flask server boots up
+init_db()
+
+@app.route('/api/report', methods=['POST'])
+def report_accident():
+    """Receives coordinates from the frontend and saves them to the DB."""
+    data = request.json
+    lat, lon = data.get('lat'), data.get('lon')
+    
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    db_path = os.path.join(base_dir, 'data', 'live_reports.db')
+    
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute('INSERT INTO reports (lat, lon) VALUES (?, ?)', (lat, lon))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({"status": "success"})
+
+@app.route('/api/live_reports', methods=['GET'])
+def get_live_reports():
+    """Sends all user-reported accidents to the map."""
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    db_path = os.path.join(base_dir, 'data', 'live_reports.db')
+    
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute('SELECT lat, lon, timestamp FROM reports')
+    rows = c.fetchall()
+    conn.close()
+    
+    return jsonify([{"lat": r[0], "lon": r[1], "time": r[2]} for r in rows])
