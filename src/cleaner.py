@@ -66,11 +66,6 @@ def run_cleaning_pipeline(input_file, output_file):
     df = clean_coordinates(df)
     df = normalize_data(df)
     
-    # FILTER FOR DELHI NCR BOUNDING BOX
-    delhi_lat_bounds = (28.40, 28.88)
-    delhi_lon_bounds = (76.83, 77.34)
-    df = filter_city_limits(df, delhi_lat_bounds, delhi_lon_bounds)
-    
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     df.to_csv(output_file, index=False)
     print(f"--- SUCCESS: Cleaned regional data saved to {output_file} ---")

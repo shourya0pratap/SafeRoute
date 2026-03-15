@@ -29,12 +29,12 @@ def calculate_risk_score(cluster_data):
     weighted_score = (fatal_crashes * 5) + (minor_crashes * 1) + (unknown_crashes * 2)
     
     # 3. Determine Risk Tier based on the Weighted Score, not just volume
-    if weighted_score >= 40:
-        return "High"
-    elif weighted_score >= 15:
-        return "Moderate"
+    if weighted_score >= 1000:
+        return "High"      # Red
+    elif weighted_score >= 300:
+        return "Moderate"  # Orange/Yellow
     else:
-        return "Low"
+        return "Low"       # Green
 
 def identify_black_spots(df, k=10):
     """
@@ -100,4 +100,4 @@ if __name__ == "__main__":
     centroids_data_path = os.path.join(base_dir, 'data', 'processed', 'cluster_centroids.csv')
     
     # Run the model! (The ML Engineer can change K=10 to whatever the Elbow Method suggests)
-    run_ml_pipeline(clean_data_path, centroids_data_path, k=10)
+    run_ml_pipeline(clean_data_path, centroids_data_path, k=500)

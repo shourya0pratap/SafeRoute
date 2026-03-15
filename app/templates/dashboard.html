@@ -162,8 +162,8 @@ endblock %} {% block head %}
               : spot.Risk_Level === "Moderate"
                 ? "#f59e0b"
                 : "#10b981";
-          L.circleMarker([spot.Latitude, spot.Longitude], {
-            radius: 8,
+          L.circle([spot.Latitude, spot.Longitude], {
+            radius: 500, // This is now exactly 500 real-world meters!
             color: color,
             fillColor: color,
             fillOpacity: 0.5,
