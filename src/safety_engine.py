@@ -42,7 +42,7 @@ def calculate_route_risk(route_waypoints, centroids_df, live_reports=[], live_da
             
             # THE NEW MATH: Exactly mirrors the JavaScript!
             crashes = int(row.get('Total_Crashes', 1))
-            cluster_radius_meters = 300 + (crashes * 50)
+            cluster_radius_meters = round(300 + (math.sqrt(crashes) * 200), 2)
                 
             dist = haversine_distance(route_lat, route_lon, float(row['Latitude']), float(row['Longitude']))
             

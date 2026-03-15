@@ -264,11 +264,10 @@ endblock %} {% block head %}
                 ? "#f59e0b"
                 : "#10b981";
 
-          // THE NEW MATH: Base 300m + 50m per crash
-          let dynamicRadius = 300 + spot.Total_Crashes * 50;
+          let dynamicRadius = parseFloat((300 + (Math.sqrt(spot.Total_Crashes) * 200)).toFixed(2));
 
           let circle = L.circle([spot.Latitude, spot.Longitude], {
-            radius: dynamicRadius, // Scales perfectly with the accident count!
+            radius: dynamicRadius,
             color: color,
             fillColor: color,
             fillOpacity: 0.5,
