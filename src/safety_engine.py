@@ -21,38 +21,40 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     distance_meters = R * c
     return distance_meters
 
-def calculate_route_risk(route_waypoints, centroids_df, danger_radius_meters=500):
+def calculate_route_risk(route_waypoints, centroids_df, live_reports=[], danger_radius_meters=500):
     """
-    Evaluates a route's safety by checking for intersections with Black Spots.
+    Evaluates a route's safety by checking for intersections with 
+    historical Black Spots AND live crowdsourced reports.
     """
     total_risk_penalty = 0
-    encountered_spots = set() # Prevent counting the same cluster twice
+    encountered_spots = set()
+    encountered_live = set()
     
     # Loop through every point on the route
     for point in route_waypoints:
         route_lat, route_lon = point['lat'], point['lon']
         
-        # Check distance against every known Black Spot
+        # 1. Check Historical Black Spots (from CSV)
         for index, row in centroids_df.iterrows():
             cluster_id = row['Cluster_ID']
-            
-            # Skip if we already penalized the route for this specific cluster
-            if cluster_id in encountered_spots:
-                continue
+            if cluster_id in encountered_spots: continue
                 
             dist = haversine_distance(route_lat, route_lon, row['Latitude'], row['Longitude'])
-            
-            # If the route waypoint falls inside the Black Spot radius
             if dist <= danger_radius_meters:
                 encountered_spots.add(cluster_id)
-                
-                # Apply penalty based on ML Risk Level
-                if row['Risk_Level'] == 'High':
-                    total_risk_penalty += 50
-                elif row['Risk_Level'] == 'Moderate':
-                    total_risk_penalty += 20
-                else:
-                    total_risk_penalty += 5
+                if row['Risk_Level'] == 'High': total_risk_penalty += 45
+                elif row['Risk_Level'] == 'Moderate': total_risk_penalty += 25
+                else: total_risk_penalty += 5
                     
-    return total_risk_penalty, len(encountered_spots)
+        # 2. Check Live User Reports (from SQLite)
+        for idx, report in enumerate(live_reports):
+            if idx in encountered_live: continue
+                
+            dist = haversine_distance(route_lat, route_lon, report['lat'], report['lon'])
+            if dist <= danger_radius_meters:
+                encountered_live.add(idx)
+                # Live hazards are immediate dangers, heavily penalize them!
+                total_risk_penalty += 75 
+                
+    return total_risk_penalty, len(encountered_spots), len(encountered_live)
 
