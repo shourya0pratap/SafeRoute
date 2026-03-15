@@ -54,7 +54,7 @@ def run_cleaning_pipeline(input_file, output_file):
 if __name__ == "__main__":
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     
-    raw_data_path = os.path.join(base_dir, 'data' , 'raw' , 'indian_accidents.csv') 
+    raw_data_path = os.path.join(base_dir, 'data', 'raw', 'indian_road_accidents.csv')
     processed_data_path = os.path.join(base_dir, 'data', 'processed', 'accidents_clean.csv')
     
     run_cleaning_pipeline(raw_data_path, processed_data_path)
