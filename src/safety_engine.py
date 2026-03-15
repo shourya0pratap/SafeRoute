@@ -21,40 +21,52 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     distance_meters = R * c
     return distance_meters
 
-def calculate_route_risk(route_waypoints, centroids_df, live_reports=[], danger_radius_meters=3000):
+def calculate_route_risk(route_waypoints, centroids_df, live_reports=[], live_danger_radius=1000):
     total_risk_penalty = 0
     encountered_spots = set()
     encountered_live = set()
     
-    # Pre-convert centroids to a list of dicts to speed up the loop and ensure floats
     clusters = centroids_df.to_dict('records')
     
     for point in route_waypoints:
-        # FORCE FLOAT CASTING - This is usually the culprit
         try:
-            route_lat = float(point['lat'])
-            route_lon = float(point['lon'])
+            route_lat, route_lon = float(point['lat']), float(point['lon'])
         except (KeyError, TypeError, ValueError):
-            continue # Skip malformed points
+            continue 
         
-        # 1. Historical Black Spots
+        # 1. Historical Black Spots (DYNAMIC RADIUS)
         for row in clusters:
-            # Use a combination of Index and ID to ensure uniqueness
             spot_key = row.get('Cluster_ID', clusters.index(row))
-            
             if spot_key in encountered_spots: 
                 continue
+            
+            # THE NEW MATH: Exactly mirrors the JavaScript!
+            crashes = int(row.get('Total_Crashes', 1))
+            cluster_radius_meters = 300 + (crashes * 50)
                 
             dist = haversine_distance(route_lat, route_lon, float(row['Latitude']), float(row['Longitude']))
             
-            if dist <= danger_radius_meters:
+            # Now it only triggers if it actually touches the custom circle size
+            if dist <= cluster_radius_meters:
                 encountered_spots.add(spot_key)
                 
-                # Check Risk_Level and apply penalty [cite: 177]
                 risk = str(row.get('Risk_Level', 'Low'))
                 if risk == 'High': total_risk_penalty += 45
                 elif risk == 'Moderate': total_risk_penalty += 25
                 else: total_risk_penalty += 5
-    
-    # (Live reports loop remains the same but ensure it uses independent indentation)
+                    
+        # 2. Live User Reports (STATIC RADIUS)
+        for idx, report in enumerate(live_reports):
+            if idx in encountered_live: continue
+                
+            dist = haversine_distance(route_lat, route_lon, float(report['lat']), float(report['lon']))
+            
+            # Live reports don't have "Total Crashes" yet, so they use the static live_danger_radius
+            if dist <= live_danger_radius:
+                encountered_live.add(idx)
+                if report.get('type') == 'Traffic Jam':
+                    total_risk_penalty += 30
+                else:
+                    total_risk_penalty += 75 
+                
     return total_risk_penalty, len(encountered_spots), len(encountered_live)

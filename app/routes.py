@@ -63,7 +63,7 @@ def evaluate_route():
         centroids_df = pd.read_csv(centroids_path)
         
         # Pass both historical data AND live reports to the engine
-        penalty_score, spots_hit, live_hits = calculate_route_risk(waypoints, centroids_df, live_reports, danger_radius_meters=500)
+        penalty_score, spots_hit, live_hits = calculate_route_risk(waypoints, centroids_df, live_reports)
         
         status = "Safe Route"
         if penalty_score >= 75:

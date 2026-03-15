@@ -1,5 +1,6 @@
 {% extends "layout.html" %} {% block title %}SafeRoute | Live Navigation{%
 endblock %} {% block head %}
+
 <link
   rel="stylesheet"
   href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -8,7 +9,11 @@ endblock %} {% block head %}
   rel="stylesheet"
   href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css"
 />
-
+<link
+  rel="icon"
+  type="image/svg+xml"
+  href="{{ url_for('static', filename='images/favicon.svg') }}"
+/>
 <style>
   body {
     overflow: hidden;
@@ -258,8 +263,12 @@ endblock %} {% block head %}
               : spot.Risk_Level === "Moderate"
                 ? "#f59e0b"
                 : "#10b981";
+
+          // THE NEW MATH: Base 300m + 50m per crash
+          let dynamicRadius = 300 + spot.Total_Crashes * 50;
+
           let circle = L.circle([spot.Latitude, spot.Longitude], {
-            radius: 500,
+            radius: dynamicRadius, // Scales perfectly with the accident count!
             color: color,
             fillColor: color,
             fillOpacity: 0.5,
@@ -270,6 +279,7 @@ endblock %} {% block head %}
                             <h4 style="margin: 0; color: #333;">Cluster #${spot.Cluster_ID}</h4>
                             <p style="margin: 5px 0; color: ${color}; font-weight: bold;">${spot.Risk_Level} Risk Zone</p>
                             <p style="margin: 0; font-size: 12px; color: #666;">Total Crashes: ${spot.Total_Crashes}</p>
+                            <p style="margin: 0; font-size: 10px; color: #888;">Radius: ${dynamicRadius}m</p>
                         </div>
                     `;
           circle.bindPopup(popupContent);
