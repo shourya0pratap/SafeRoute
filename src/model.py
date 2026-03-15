@@ -29,10 +29,10 @@ def calculate_risk_score(cluster_data):
     weighted_score = (fatal_crashes * 5) + (minor_crashes * 1) + (unknown_crashes * 2)
     
     # 3. Determine Risk Tier based on the Weighted Score, not just volume
-    if weighted_score >= 1000:
+    if weighted_score >= 45:
         return "High"      # Red
-    elif weighted_score >= 300:
-        return "Moderate"  # Orange/Yellow
+    elif weighted_score >= 25:
+        return "Moderate"  # Orange
     else:
         return "Low"       # Green
 

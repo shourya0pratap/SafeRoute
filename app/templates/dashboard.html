@@ -162,12 +162,22 @@ endblock %} {% block head %}
               : spot.Risk_Level === "Moderate"
                 ? "#f59e0b"
                 : "#10b981";
-          L.circle([spot.Latitude, spot.Longitude], {
-            radius: 500, // This is now exactly 500 real-world meters!
+
+          let circle = L.circle([spot.Latitude, spot.Longitude], {
+            radius: 500,
             color: color,
             fillColor: color,
             fillOpacity: 0.5,
           }).addTo(clusterLayer);
+
+          let popupContent = `
+                        <div style="font-family: 'Inter', sans-serif; min-width: 150px;">
+                            <h4 style="margin: 0; color: #333;">Cluster #${spot.Cluster_ID}</h4>
+                            <p style="margin: 5px 0; color: ${color}; font-weight: bold;">${spot.Risk_Level} Risk Zone</p>
+                            <p style="margin: 0; font-size: 12px; color: #666;">Total Crashes: ${spot.Total_Crashes}</p>
+                        </div>
+                    `;
+          circle.bindPopup(popupContent);
         });
       })
       .catch((err) => console.error("Error loading spots:", err));
