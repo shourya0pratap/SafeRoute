@@ -387,7 +387,10 @@ endblock %} {% block head %}
         for (let i = 0; i < routes.length; i++) {
           let route = routes[i];
           let routeCoords = [];
-          for (let j = 0; j < route.coordinates.length; j += 5) {
+          // Force a maximum of 50 calculation points to guarantee instant loading
+          let stepSize = Math.max(1, Math.floor(route.coordinates.length / 50));
+
+          for (let j = 0; j < route.coordinates.length; j += stepSize) {
             routeCoords.push({
               lat: route.coordinates[j].lat,
               lon: route.coordinates[j].lng,

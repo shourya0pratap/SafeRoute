@@ -100,4 +100,4 @@ if __name__ == "__main__":
     centroids_data_path = os.path.join(base_dir, 'data', 'processed', 'cluster_centroids.csv')
     
     # Run the model! (The ML Engineer can change K=10 to whatever the Elbow Method suggests)
-    run_ml_pipeline(clean_data_path, centroids_data_path, k=500)
+    run_ml_pipeline(clean_data_path, centroids_data_path, k=200)
