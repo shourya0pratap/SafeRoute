@@ -159,7 +159,6 @@ endblock %} {% block head %}
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
 <script>
-  // 1. Initialize Map
   var map = L.map("live-map").setView([28.4595, 77.0266], 11);
 
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
@@ -170,55 +169,83 @@ endblock %} {% block head %}
   var clusterLayer = L.layerGroup().addTo(map);
   var liveReportLayer = L.layerGroup().addTo(map);
 
-  // --- CROWDSOURCING SYSTEM ---
+  // --- LIVE GPS LOCATION ---
+  function useCurrentLocation() {
+    if (navigator.geolocation) {
+      document.getElementById("start-location").value = "Locating...";
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          document.getElementById("start-location").value =
+            `${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)}`;
+        },
+        (error) => {
+          alert(
+            "Could not get location. Please allow browser location permissions.",
+          );
+          document.getElementById("start-location").value = "";
+        },
+      );
+    } else {
+      alert("Geolocation is not supported by your browser.");
+    }
+  }
 
-  // Right-Click Context Menu
+  // --- THE NEW CONTEXT MENU ---
   map.on("contextmenu", function (e) {
     let lat = e.latlng.lat;
     let lon = e.latlng.lng;
 
     let popupContent = `
             <div style="text-align: center; font-family: 'Inter', sans-serif;">
-                <p style="margin-bottom: 8px; color: #f43f5e; font-weight: bold;">Report Live Accident?</p>
-                <button onclick="submitReport(${lat}, ${lon})" style="background: #f43f5e; color: white; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer;">Drop Warning Pin</button>
+                <p style="margin-bottom: 8px; color: #333; font-weight: bold;">Map Actions</p>
+                <button onclick="setDestination(${lat}, ${lon})" style="background: #10b981; color: white; padding: 6px; border: none; border-radius: 4px; cursor: pointer; width: 100%; margin-bottom: 5px;">📍 Set as Destination</button>
+                <button onclick="submitReport(${lat}, ${lon}, 'Accident')" style="background: #f43f5e; color: white; padding: 6px; border: none; border-radius: 4px; cursor: pointer; width: 100%; margin-bottom: 5px;">⚠️ Report Accident</button>
+                <button onclick="submitReport(${lat}, ${lon}, 'Traffic Jam')" style="background: #f59e0b; color: white; padding: 6px; border: none; border-radius: 4px; cursor: pointer; width: 100%;">🚗 Report Traffic</button>
             </div>
         `;
     L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map);
   });
 
-  // Send the user report to SQLite Backend
-  window.submitReport = async function (lat, lon) {
+  // Custom Destination Logic
+  window.setDestination = function (lat, lon) {
+    document.getElementById("end-location").value =
+      `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    map.closePopup();
+    geocodeAndRoute(); // Auto-calculate once clicked!
+  };
+
+  // Submitting a Hazard
+  window.submitReport = async function (lat, lon, type) {
     await fetch("/api/report", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lat: lat, lon: lon }),
+      body: JSON.stringify({ lat: lat, lon: lon, type: type }),
     });
     map.closePopup();
-    loadLiveReports(); // Instantly refresh the blue dots
+    loadLiveReports();
   };
 
-  // Load Blue Live Reports
+  // Load Live Hazards (Now with dynamic colors)
   function loadLiveReports() {
     fetch("/api/live_reports")
       .then((res) => res.json())
       .then((data) => {
         liveReportLayer.clearLayers();
         data.forEach((report) => {
+          // Blue for accidents, Orange for Traffic
+          let color = report.type === "Traffic Jam" ? "#f59e0b" : "#3b82f6";
           let marker = L.circleMarker([report.lat, report.lon], {
             radius: 8,
-            color: "#3b82f6",
-            fillColor: "#3b82f6",
+            color: color,
+            fillColor: color,
             fillOpacity: 0.9,
           }).addTo(liveReportLayer);
-          marker.bindPopup(
-            `<b>User Reported Hazard</b><br>Time: ${report.time}`,
-          );
+          marker.bindPopup(`<b>${report.type}</b><br>Time: ${report.time}`);
         });
       });
   }
 
   // --- HISTORICAL ML CLUSTERS ---
-
   function loadBlackSpots() {
     fetch("/api/clusters")
       .then((res) => res.json())
@@ -232,7 +259,6 @@ endblock %} {% block head %}
               : spot.Risk_Level === "Moderate"
                 ? "#f59e0b"
                 : "#10b981";
-
           let circle = L.circle([spot.Latitude, spot.Longitude], {
             radius: 500,
             color: color,
@@ -249,34 +275,10 @@ endblock %} {% block head %}
                     `;
           circle.bindPopup(popupContent);
         });
-      })
-      .catch((err) => console.error("Error loading spots:", err));
+      });
   }
 
-  // --- LIVE GPS LOCATION ---
-  function useCurrentLocation() {
-    if (navigator.geolocation) {
-      document.getElementById("start-location").value = "Locating...";
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          let lat = position.coords.latitude.toFixed(5);
-          let lon = position.coords.longitude.toFixed(5);
-          // Paste raw coordinates directly into the input box
-          document.getElementById("start-location").value = `${lat}, ${lon}`;
-        },
-        (error) => {
-          alert(
-            "Could not get location. Please allow browser location permissions.",
-          );
-          document.getElementById("start-location").value = "";
-        },
-      );
-    } else {
-      alert("Geolocation is not supported by your browser.");
-    }
-  }
-
-  // --- ADVANCED ROUTING & MULTI-PATH ANALYTICS ---
+  // --- ROUTING ENGINE ---
   async function geocodeAndRoute() {
     let startText = document.getElementById("start-location").value;
     let endText = document.getElementById("end-location").value;
@@ -286,7 +288,6 @@ endblock %} {% block head %}
       "Calculating coordinates...";
 
     try {
-      // 1. Check if Origin is a GPS Coordinate (from the Live Location button) or Text
       if (startText.includes(",")) {
         let parts = startText.split(",");
         startLat = parseFloat(parts[0].trim());
@@ -296,12 +297,10 @@ endblock %} {% block head %}
           `https://nominatim.openstreetmap.org/search?format=json&q=${startText}`,
         );
         let startData = await startRes.json();
-        if (startData.length === 0) throw "Origin not found";
         startLat = parseFloat(startData[0].lat);
         startLon = parseFloat(startData[0].lon);
       }
 
-      // 2. Geocode Destination (Usually Text)
       if (endText.includes(",")) {
         let parts = endText.split(",");
         endLat = parseFloat(parts[0].trim());
@@ -311,7 +310,6 @@ endblock %} {% block head %}
           `https://nominatim.openstreetmap.org/search?format=json&q=${endText}`,
         );
         let endData = await endRes.json();
-        if (endData.length === 0) throw "Destination not found";
         endLat = parseFloat(endData[0].lat);
         endLon = parseFloat(endData[0].lon);
       }
@@ -320,34 +318,34 @@ endblock %} {% block head %}
         map.removeControl(routingControl);
       }
 
-      // 3. Request Multiple Routes from OSRM
       routingControl = L.Routing.control({
         waypoints: [L.latLng(startLat, startLon), L.latLng(endLat, endLon)],
         router: L.Routing.osrmv1({
           serviceUrl: "https://router.project-osrm.org/route/v1",
         }),
-        showAlternatives: true, // Crucial: Ask for alternative paths!
+        showAlternatives: true,
         altLineOptions: {
           styles: [{ color: "#64748b", opacity: 0.7, weight: 6 }],
-        }, // Grey alternative lines
+        },
         lineOptions: {
           styles: [{ color: "#3b82f6", opacity: 0.9, weight: 6 }],
-        }, // Blue main line
+        },
         createMarker: function () {
           return null;
         },
         show: false,
+        addWaypoints: false,
+        routeWhileDragging: false,
+        fitSelectedRoutes: true,
       }).addTo(map);
 
-      // 4. Evaluate ALL routes returned by OSRM
       routingControl.on("routesfound", async function (e) {
         let routes = e.routes;
         document.getElementById("route-stats").innerHTML =
-          `<span style="color: #3b82f6;"><i class="fa-solid fa-spinner fa-spin"></i> Analyzing ${routes.length} possible routes...</span>`;
+          `<span style="color: #3b82f6;"><i class="fa-solid fa-spinner fa-spin"></i> Analyzing routes...</span>`;
 
         let evaluatedRoutes = [];
 
-        // Loop through every alternative route and send it to your Python Backend
         for (let i = 0; i < routes.length; i++) {
           let route = routes[i];
           let routeCoords = route.coordinates.map((c) => ({
@@ -369,13 +367,9 @@ endblock %} {% block head %}
               timeMin: Math.round(route.summary.totalTime / 60),
               safety: safetyData,
             });
-          } catch (error) {
-            console.error("Evaluation failed for route", i);
-          }
+          } catch (error) {}
         }
 
-        // 5. Crown the Winners
-        // Find the route with the lowest risk penalty (Safest) and lowest time (Fastest)
         let safest = evaluatedRoutes.reduce((prev, curr) =>
           prev.safety.penalty_score < curr.safety.penalty_score ? prev : curr,
         );
@@ -383,13 +377,11 @@ endblock %} {% block head %}
           prev.timeMin < curr.timeMin ? prev : curr,
         );
 
-        // 6. Build the UI Cards
         let html = `<b style="color: white;"><i class="fa-solid fa-code-compare"></i> Route Comparison</b><br><br>`;
 
         evaluatedRoutes.forEach((r) => {
           let isSafest = r === safest;
           let isFastest = r === fastest;
-
           let badges = "";
           if (isSafest)
             badges += `<span style="background:#10b981; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-right:4px;">Safest</span>`;
@@ -402,8 +394,9 @@ endblock %} {% block head %}
               ? "#3b82f6"
               : "#64748b";
 
+          // Note the class "route-card" and the custom data attributes!
           html += `
-                        <div style="padding: 12px; margin-bottom:12px; background: rgba(15, 23, 42, 0.8); border-left: 4px solid ${borderColor}; border-radius: 6px;">
+                        <div class="route-card" data-time="${r.timeMin}" data-dist="${r.distanceKm}" style="padding: 12px; margin-bottom:12px; background: rgba(15, 23, 42, 0.8); border-left: 4px solid ${borderColor}; border-radius: 6px; transition: 0.3s; cursor: pointer;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 5px;">
                                 <span style="color: #f8fafc; font-weight:bold;">Route ${r.index}</span>
                                 <div>${badges}</div>
@@ -417,8 +410,33 @@ endblock %} {% block head %}
                     `;
         });
 
-        html += `<div style="font-size: 0.8rem; color: #64748b; margin-top: 10px;"><i>Click the grey alternative lines on the map to view their exact paths.</i></div>`;
+        html += `<div style="font-size: 0.8rem; color: #64748b; margin-top: 10px;"><i>Click grey routes on map to switch.</i></div>`;
         document.getElementById("route-stats").innerHTML = html;
+      });
+
+      // --- THE UI FLASHING LOGIC ---
+      // This fires whenever a user clicks an alternate line on the map
+      routingControl.on("routeselected", function (e) {
+        // Dim all cards back to normal
+        document.querySelectorAll(".route-card").forEach((card) => {
+          card.style.transform = "scale(1)";
+          card.style.boxShadow = "none";
+          card.style.backgroundColor = "rgba(15, 23, 42, 0.8)";
+        });
+
+        // Match the clicked route's time/distance to the HTML card
+        let matchTime = Math.round(e.route.summary.totalTime / 60);
+        let matchDist = (e.route.summary.totalDistance / 1000).toFixed(1);
+
+        let activeCard = document.querySelector(
+          `.route-card[data-time="${matchTime}"][data-dist="${matchDist}"]`,
+        );
+        if (activeCard) {
+          // Flash the card!
+          activeCard.style.transform = "scale(1.03)";
+          activeCard.style.boxShadow = "0 0 15px rgba(59, 130, 246, 0.4)";
+          activeCard.style.backgroundColor = "rgba(30, 41, 59, 1)";
+        }
       });
     } catch (error) {
       console.error("Geocoding failed:", error);
@@ -427,7 +445,6 @@ endblock %} {% block head %}
     }
   }
 
-  // --- INITIALIZATION ---
   document.addEventListener("DOMContentLoaded", () => {
     loadBlackSpots();
     loadLiveReports();
