@@ -97,12 +97,30 @@ endblock %} {% block head %}
 
     <div class="control-group">
       <label for="start-location">Origin</label>
-      <input
-        type="text"
-        id="start-location"
-        value="Gurgaon"
-        placeholder="e.g. Gurgaon"
-      />
+      <div style="display: flex; gap: 8px">
+        <input
+          type="text"
+          id="start-location"
+          value="Gurgaon"
+          placeholder="e.g. Gurgaon"
+          style="flex-grow: 1"
+        />
+        <button
+          onclick="useCurrentLocation()"
+          title="Use Live Location"
+          style="
+            background: #334155;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #3b82f6;
+            border-radius: 8px;
+            cursor: pointer;
+            padding: 0 12px;
+            transition: 0.3s;
+          "
+        >
+          <i class="fa-solid fa-location-crosshairs"></i>
+        </button>
+      </div>
     </div>
 
     <div class="control-group">
@@ -127,7 +145,9 @@ endblock %} {% block head %}
         font-weight: bold;
         font-size: 0.9rem;
       "
-    ></div>
+    >
+      <i>Tip: Right-click anywhere on the map to report a live hazard!</i>
+    </div>
   </aside>
 
   <main class="map-area">
@@ -139,7 +159,7 @@ endblock %} {% block head %}
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
 <script>
-  // 1. Initialize Map (Centered on Delhi NCR / Gurgaon)
+  // 1. Initialize Map
   var map = L.map("live-map").setView([28.4595, 77.0266], 11);
 
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
@@ -148,13 +168,63 @@ endblock %} {% block head %}
 
   var routingControl = null;
   var clusterLayer = L.layerGroup().addTo(map);
+  var liveReportLayer = L.layerGroup().addTo(map);
 
-  // 2. Load the Danger Spots
+  // --- CROWDSOURCING SYSTEM ---
+
+  // Right-Click Context Menu
+  map.on("contextmenu", function (e) {
+    let lat = e.latlng.lat;
+    let lon = e.latlng.lng;
+
+    let popupContent = `
+            <div style="text-align: center; font-family: 'Inter', sans-serif;">
+                <p style="margin-bottom: 8px; color: #f43f5e; font-weight: bold;">Report Live Accident?</p>
+                <button onclick="submitReport(${lat}, ${lon})" style="background: #f43f5e; color: white; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer;">Drop Warning Pin</button>
+            </div>
+        `;
+    L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map);
+  });
+
+  // Send the user report to SQLite Backend
+  window.submitReport = async function (lat, lon) {
+    await fetch("/api/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat: lat, lon: lon }),
+    });
+    map.closePopup();
+    loadLiveReports(); // Instantly refresh the blue dots
+  };
+
+  // Load Blue Live Reports
+  function loadLiveReports() {
+    fetch("/api/live_reports")
+      .then((res) => res.json())
+      .then((data) => {
+        liveReportLayer.clearLayers();
+        data.forEach((report) => {
+          let marker = L.circleMarker([report.lat, report.lon], {
+            radius: 8,
+            color: "#3b82f6",
+            fillColor: "#3b82f6",
+            fillOpacity: 0.9,
+          }).addTo(liveReportLayer);
+          marker.bindPopup(
+            `<b>User Reported Hazard</b><br>Time: ${report.time}`,
+          );
+        });
+      });
+  }
+
+  // --- HISTORICAL ML CLUSTERS ---
+
   function loadBlackSpots() {
     fetch("/api/clusters")
       .then((res) => res.json())
       .then((data) => {
         if (data.error) return;
+        clusterLayer.clearLayers();
         data.forEach((spot) => {
           let color =
             spot.Risk_Level === "High"
@@ -183,193 +253,184 @@ endblock %} {% block head %}
       .catch((err) => console.error("Error loading spots:", err));
   }
 
-  // 3. Geocode text to coordinates and draw route
+  // --- LIVE GPS LOCATION ---
+  function useCurrentLocation() {
+    if (navigator.geolocation) {
+      document.getElementById("start-location").value = "Locating...";
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          let lat = position.coords.latitude.toFixed(5);
+          let lon = position.coords.longitude.toFixed(5);
+          // Paste raw coordinates directly into the input box
+          document.getElementById("start-location").value = `${lat}, ${lon}`;
+        },
+        (error) => {
+          alert(
+            "Could not get location. Please allow browser location permissions.",
+          );
+          document.getElementById("start-location").value = "";
+        },
+      );
+    } else {
+      alert("Geolocation is not supported by your browser.");
+    }
+  }
+
+  // --- ADVANCED ROUTING & MULTI-PATH ANALYTICS ---
   async function geocodeAndRoute() {
     let startText = document.getElementById("start-location").value;
     let endText = document.getElementById("end-location").value;
+    let startLat, startLon, endLat, endLon;
 
-    document.getElementById("route-stats").innerHTML = `
-    Route Found!<br>
-    Distance: ${distanceKm} km<br>
-    Est. Time: ${timeMin} mins<br><br>
-    <div style="padding: 10px; background: rgba(0,0,0,0.2); border-left: 4px solid ${statusColor}; border-radius: 4px;">
-        <span style="color: ${statusColor}; font-weight: bold;">
-            <i class="fa-solid fa-triangle-exclamation"></i> ${safetyData.status}
-        </span><br>
-        <span style="color: #cbd5e1; font-size: 0.85rem;">
-            Risk Penalty: ${safetyData.penalty_score}<br>
-            Historical Spots Crossed: ${safetyData.black_spots_intersected}<br>
-            <b style="color: #3b82f6;">Live Hazards Crossed: ${safetyData.live_reports_intersected}</b>
-        </span>
-    </div>
-`;
+    document.getElementById("route-stats").innerHTML =
+      "Calculating coordinates...";
 
     try {
-      // Fetch coordinates for Origin
-      let startRes = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${startText}`,
-      );
-      let startData = await startRes.json();
-
-      // Fetch coordinates for Destination
-      let endRes = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${endText}`,
-      );
-      let endData = await endRes.json();
-
-      if (startData.length === 0 || endData.length === 0) {
-        alert(
-          "Could not find one of the locations. Please try adding the state or country.",
+      // 1. Check if Origin is a GPS Coordinate (from the Live Location button) or Text
+      if (startText.includes(",")) {
+        let parts = startText.split(",");
+        startLat = parseFloat(parts[0].trim());
+        startLon = parseFloat(parts[1].trim());
+      } else {
+        let startRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${startText}`,
         );
-        document.getElementById("route-stats").innerHTML =
-          "Location not found.";
-        return;
+        let startData = await startRes.json();
+        if (startData.length === 0) throw "Origin not found";
+        startLat = parseFloat(startData[0].lat);
+        startLon = parseFloat(startData[0].lon);
       }
 
-      let startLat = parseFloat(startData[0].lat),
-        startLon = parseFloat(startData[0].lon);
-      let endLat = parseFloat(endData[0].lat),
+      // 2. Geocode Destination (Usually Text)
+      if (endText.includes(",")) {
+        let parts = endText.split(",");
+        endLat = parseFloat(parts[0].trim());
+        endLon = parseFloat(parts[1].trim());
+      } else {
+        let endRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${endText}`,
+        );
+        let endData = await endRes.json();
+        if (endData.length === 0) throw "Destination not found";
+        endLat = parseFloat(endData[0].lat);
         endLon = parseFloat(endData[0].lon);
+      }
 
-      // Remove old route if it exists
       if (routingControl) {
         map.removeControl(routingControl);
       }
 
-      // Draw the new route using the fetched coordinates
+      // 3. Request Multiple Routes from OSRM
       routingControl = L.Routing.control({
         waypoints: [L.latLng(startLat, startLon), L.latLng(endLat, endLon)],
         router: L.Routing.osrmv1({
           serviceUrl: "https://router.project-osrm.org/route/v1",
         }),
+        showAlternatives: true, // Crucial: Ask for alternative paths!
+        altLineOptions: {
+          styles: [{ color: "#64748b", opacity: 0.7, weight: 6 }],
+        }, // Grey alternative lines
         lineOptions: {
-          styles: [{ color: "#3b82f6", opacity: 0.8, weight: 6 }],
-        },
+          styles: [{ color: "#3b82f6", opacity: 0.9, weight: 6 }],
+        }, // Blue main line
         createMarker: function () {
           return null;
         },
         show: false,
       }).addTo(map);
 
-      // --- THE SAFETY EVALUATION LOGIC ---
+      // 4. Evaluate ALL routes returned by OSRM
       routingControl.on("routesfound", async function (e) {
         let routes = e.routes;
-        let distanceKm = (routes[0].summary.totalDistance / 1000).toFixed(1);
-        let timeMin = Math.round(routes[0].summary.totalTime / 60);
-
-        // Show a loading state while Python does the heavy lifting
         document.getElementById("route-stats").innerHTML =
-          `Route Found!<br>Distance: ${distanceKm} km<br>Est. Time: ${timeMin} mins<br>
-                     <span style="color: #3b82f6;">Analyzing Route Safety...</span>`;
+          `<span style="color: #3b82f6;"><i class="fa-solid fa-spinner fa-spin"></i> Analyzing ${routes.length} possible routes...</span>`;
 
-        // Extract the GPS coordinates of the blue line
-        let routeCoords = routes[0].coordinates.map((c) => ({
-          lat: c.lat,
-          lon: c.lng,
-        }));
+        let evaluatedRoutes = [];
 
-        // Send the coordinates to Flask
-        try {
-          let response = await fetch("/api/evaluate_route", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ waypoints: routeCoords }),
-          });
+        // Loop through every alternative route and send it to your Python Backend
+        for (let i = 0; i < routes.length; i++) {
+          let route = routes[i];
+          let routeCoords = route.coordinates.map((c) => ({
+            lat: c.lat,
+            lon: c.lng,
+          }));
 
-          let safetyData = await response.json();
+          try {
+            let response = await fetch("/api/evaluate_route", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ waypoints: routeCoords }),
+            });
+            let safetyData = await response.json();
 
-          if (safetyData.error) {
-            document.getElementById("route-stats").innerHTML +=
-              `<br><span style="color: red;">Error: ${safetyData.error}</span>`;
-            return;
+            evaluatedRoutes.push({
+              index: i + 1,
+              distanceKm: (route.summary.totalDistance / 1000).toFixed(1),
+              timeMin: Math.round(route.summary.totalTime / 60),
+              safety: safetyData,
+            });
+          } catch (error) {
+            console.error("Evaluation failed for route", i);
           }
+        }
 
-          // Determine text color based on danger level
-          let statusColor = "#10b981"; // Green
-          if (safetyData.status === "High Risk Zone") statusColor = "#f43f5e"; // Red
-          if (safetyData.status === "Moderate Caution") statusColor = "#f59e0b"; // Orange
+        // 5. Crown the Winners
+        // Find the route with the lowest risk penalty (Safest) and lowest time (Fastest)
+        let safest = evaluatedRoutes.reduce((prev, curr) =>
+          prev.safety.penalty_score < curr.safety.penalty_score ? prev : curr,
+        );
+        let fastest = evaluatedRoutes.reduce((prev, curr) =>
+          prev.timeMin < curr.timeMin ? prev : curr,
+        );
 
-          // Update the UI with the final Safety Score!
-          document.getElementById("route-stats").innerHTML = `
-                        Route Found!<br>
-                        Distance: ${distanceKm} km<br>
-                        Est. Time: ${timeMin} mins<br><br>
-                        <div style="padding: 10px; background: rgba(0,0,0,0.2); border-left: 4px solid ${statusColor}; border-radius: 4px;">
-                            <span style="color: ${statusColor}; font-weight: bold;">
-                                <i class="fa-solid fa-triangle-exclamation"></i> ${safetyData.status}
-                            </span><br>
-                            <span style="color: #cbd5e1; font-size: 0.85rem;">
-                                Risk Penalty: ${safetyData.penalty_score}<br>
-                                Black Spots Crossed: ${safetyData.black_spots_intersected}
+        // 6. Build the UI Cards
+        let html = `<b style="color: white;"><i class="fa-solid fa-code-compare"></i> Route Comparison</b><br><br>`;
+
+        evaluatedRoutes.forEach((r) => {
+          let isSafest = r === safest;
+          let isFastest = r === fastest;
+
+          let badges = "";
+          if (isSafest)
+            badges += `<span style="background:#10b981; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-right:4px;">Safest</span>`;
+          if (isFastest)
+            badges += `<span style="background:#3b82f6; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem;">Fastest</span>`;
+
+          let borderColor = isSafest
+            ? "#10b981"
+            : isFastest
+              ? "#3b82f6"
+              : "#64748b";
+
+          html += `
+                        <div style="padding: 12px; margin-bottom:12px; background: rgba(15, 23, 42, 0.8); border-left: 4px solid ${borderColor}; border-radius: 6px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 5px;">
+                                <span style="color: #f8fafc; font-weight:bold;">Route ${r.index}</span>
+                                <div>${badges}</div>
+                            </div>
+                            <span style="color: #cbd5e1; font-size:0.9rem;">
+                                <b>${r.timeMin} mins</b> (${r.distanceKm} km)<br>
+                                Risk Score: <b style="color:${isSafest ? "#10b981" : "#f43f5e"}">${r.safety.penalty_score}</b> 
+                                (Hazards: ${r.safety.live_reports_intersected + r.safety.black_spots_intersected})
                             </span>
                         </div>
                     `;
-        } catch (error) {
-          console.error("Safety evaluation failed:", error);
-          document.getElementById("route-stats").innerHTML +=
-            `<br><span style="color: red;">Safety check failed.</span>`;
-        }
+        });
+
+        html += `<div style="font-size: 0.8rem; color: #64748b; margin-top: 10px;"><i>Click the grey alternative lines on the map to view their exact paths.</i></div>`;
+        document.getElementById("route-stats").innerHTML = html;
       });
     } catch (error) {
       console.error("Geocoding failed:", error);
-      document.getElementById("route-stats").innerHTML = "Routing failed.";
+      document.getElementById("route-stats").innerHTML =
+        `<span style="color: #f43f5e;">Routing failed: ${error}</span>`;
     }
   }
-  // --- LIVE REPORTING SYSTEM ---
 
-  // 1. Listen for Right-Click to open reporting menu
-  map.on("contextmenu", function (e) {
-    let lat = e.latlng.lat;
-    let lon = e.latlng.lng;
-
-    let popupContent = `
-            <div style="text-align: center; font-family: 'Inter', sans-serif;">
-                <p style="margin-bottom: 8px; color: #f43f5e; font-weight: bold;">Report Live Accident?</p>
-                <button onclick="submitReport(${lat}, ${lon})" style="background: #f43f5e; color: white; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer;">Drop Warning Pin</button>
-            </div>
-        `;
-    L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map);
-  });
-
-  // 2. Send the click to the SQLite Database
-  window.submitReport = async function (lat, lon) {
-    await fetch("/api/report", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lat: lat, lon: lon }),
-    });
-    map.closePopup();
-    loadLiveReports(); // Instantly refresh the map!
-  };
-
-  // 3. Draw the User Reports as glowing Blue Dots
-  var liveReportLayer = L.layerGroup().addTo(map);
-
-  function loadLiveReports() {
-    fetch("/api/live_reports")
-      .then((res) => res.json())
-      .then((data) => {
-        liveReportLayer.clearLayers();
-        data.forEach((report) => {
-          let marker = L.circleMarker([report.lat, report.lon], {
-            radius: 8,
-            color: "#3b82f6",
-            fillColor: "#3b82f6",
-            fillOpacity: 0.9,
-          }).addTo(liveReportLayer);
-          marker.bindPopup(
-            `<b>User Reported Hazard</b><br>Time: ${report.time}`,
-          );
-        });
-      });
-  }
-
-  // Update your DOMContentLoaded to load BOTH datasets on startup
+  // --- INITIALIZATION ---
   document.addEventListener("DOMContentLoaded", () => {
     loadBlackSpots();
     loadLiveReports();
   });
-  // 4. Auto-load the spots when the page first opens
-  document.addEventListener("DOMContentLoaded", loadBlackSpots);
 </script>
 {% endblock %}
