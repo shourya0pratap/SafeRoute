@@ -42,26 +42,31 @@ def get_clusters():
     
 @app.route('/api/evaluate_route', methods=['POST'])
 def evaluate_route():
-    """
-    Receives a polyline (array of GPS coordinates) from the frontend,
-    calculates the intersections with Black Spots, and returns a Safety Score.
-    """
     data = request.json
     waypoints = data.get('waypoints', [])
     
-    # Load the machine learning centroids
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     centroids_path = os.path.join(base_dir, 'data', 'processed', 'cluster_centroids.csv')
+    db_path = os.path.join(base_dir, 'data', 'live_reports.db')
+    
+    # Fetch live reports from the SQLite database
+    live_reports = []
+    if os.path.exists(db_path):
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        c.execute('SELECT lat, lon FROM reports')
+        rows = c.fetchall()
+        conn.close()
+        live_reports = [{'lat': r[0], 'lon': r[1]} for r in rows]
     
     try:
         centroids_df = pd.read_csv(centroids_path)
         
-        # Run the Haversine Intersection Algorithm
-        penalty_score, spots_hit = calculate_route_risk(waypoints, centroids_df, danger_radius_meters=500)
+        # Pass both historical data AND live reports to the engine
+        penalty_score, spots_hit, live_hits = calculate_route_risk(waypoints, centroids_df, live_reports, danger_radius_meters=500)
         
-        # Categorize the final safety level
         status = "Safe Route"
-        if penalty_score >= 50:
+        if penalty_score >= 75:
             status = "High Risk Zone"
         elif penalty_score > 0:
             status = "Moderate Caution"
@@ -69,6 +74,7 @@ def evaluate_route():
         return jsonify({
             "penalty_score": penalty_score,
             "black_spots_intersected": spots_hit,
+            "live_reports_intersected": live_hits,
             "status": status
         })
         
