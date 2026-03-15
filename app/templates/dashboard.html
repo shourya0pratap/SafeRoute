@@ -302,7 +302,60 @@ endblock %} {% block head %}
       document.getElementById("route-stats").innerHTML = "Routing failed.";
     }
   }
+  // --- LIVE REPORTING SYSTEM ---
 
+  // 1. Listen for Right-Click to open reporting menu
+  map.on("contextmenu", function (e) {
+    let lat = e.latlng.lat;
+    let lon = e.latlng.lng;
+
+    let popupContent = `
+            <div style="text-align: center; font-family: 'Inter', sans-serif;">
+                <p style="margin-bottom: 8px; color: #f43f5e; font-weight: bold;">Report Live Accident?</p>
+                <button onclick="submitReport(${lat}, ${lon})" style="background: #f43f5e; color: white; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer;">Drop Warning Pin</button>
+            </div>
+        `;
+    L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map);
+  });
+
+  // 2. Send the click to the SQLite Database
+  window.submitReport = async function (lat, lon) {
+    await fetch("/api/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat: lat, lon: lon }),
+    });
+    map.closePopup();
+    loadLiveReports(); // Instantly refresh the map!
+  };
+
+  // 3. Draw the User Reports as glowing Blue Dots
+  var liveReportLayer = L.layerGroup().addTo(map);
+
+  function loadLiveReports() {
+    fetch("/api/live_reports")
+      .then((res) => res.json())
+      .then((data) => {
+        liveReportLayer.clearLayers();
+        data.forEach((report) => {
+          let marker = L.circleMarker([report.lat, report.lon], {
+            radius: 8,
+            color: "#3b82f6",
+            fillColor: "#3b82f6",
+            fillOpacity: 0.9,
+          }).addTo(liveReportLayer);
+          marker.bindPopup(
+            `<b>User Reported Hazard</b><br>Time: ${report.time}`,
+          );
+        });
+      });
+  }
+
+  // Update your DOMContentLoaded to load BOTH datasets on startup
+  document.addEventListener("DOMContentLoaded", () => {
+    loadBlackSpots();
+    loadLiveReports();
+  });
   // 4. Auto-load the spots when the page first opens
   document.addEventListener("DOMContentLoaded", loadBlackSpots);
 </script>
