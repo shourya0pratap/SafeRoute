@@ -159,6 +159,7 @@ endblock %} {% block head %}
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
 <script>
+  // --- 1. GLOBALS & MAP INIT ---
   var map = L.map("live-map").setView([28.4595, 77.0266], 11);
 
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
@@ -168,8 +169,12 @@ endblock %} {% block head %}
   var routingControl = null;
   var clusterLayer = L.layerGroup().addTo(map);
   var liveReportLayer = L.layerGroup().addTo(map);
+  var routeHighlightLayer = L.layerGroup().addTo(map); // <- This was the missing layer!
 
-  // --- LIVE GPS LOCATION ---
+  window.currentRoutesData = [];
+  window.routeRequestCount = 0;
+
+  // --- 2. LIVE GPS & CROWDSOURCING ---
   function useCurrentLocation() {
     if (navigator.geolocation) {
       document.getElementById("start-location").value = "Locating...";
@@ -190,11 +195,9 @@ endblock %} {% block head %}
     }
   }
 
-  // --- THE NEW CONTEXT MENU ---
   map.on("contextmenu", function (e) {
     let lat = e.latlng.lat;
     let lon = e.latlng.lng;
-
     let popupContent = `
             <div style="text-align: center; font-family: 'Inter', sans-serif;">
                 <p style="margin-bottom: 8px; color: #333; font-weight: bold;">Map Actions</p>
@@ -206,15 +209,13 @@ endblock %} {% block head %}
     L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map);
   });
 
-  // Custom Destination Logic
   window.setDestination = function (lat, lon) {
     document.getElementById("end-location").value =
       `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
     map.closePopup();
-    geocodeAndRoute(); // Auto-calculate once clicked!
+    geocodeAndRoute();
   };
 
-  // Submitting a Hazard
   window.submitReport = async function (lat, lon, type) {
     await fetch("/api/report", {
       method: "POST",
@@ -225,14 +226,12 @@ endblock %} {% block head %}
     loadLiveReports();
   };
 
-  // Load Live Hazards (Now with dynamic colors)
   function loadLiveReports() {
     fetch("/api/live_reports")
       .then((res) => res.json())
       .then((data) => {
         liveReportLayer.clearLayers();
         data.forEach((report) => {
-          // Blue for accidents, Orange for Traffic
           let color = report.type === "Traffic Jam" ? "#f59e0b" : "#3b82f6";
           let marker = L.circleMarker([report.lat, report.lon], {
             radius: 8,
@@ -245,7 +244,7 @@ endblock %} {% block head %}
       });
   }
 
-  // --- HISTORICAL ML CLUSTERS ---
+  // --- 3. HISTORICAL ML CLUSTERS ---
   function loadBlackSpots() {
     fetch("/api/clusters")
       .then((res) => res.json())
@@ -278,7 +277,40 @@ endblock %} {% block head %}
       });
   }
 
-  // --- ROUTING ENGINE ---
+  // --- 4. BI-DIRECTIONAL UI SYNC ---
+  window.selectRouteCard = function (index) {
+    document.querySelectorAll(".route-card").forEach((card, i) => {
+      if (i === index) {
+        card.style.transform = "scale(1.03)";
+        card.style.boxShadow = "0 0 15px rgba(59, 130, 246, 0.4)";
+        card.style.backgroundColor = "rgba(30, 41, 59, 1)";
+      } else {
+        card.style.transform = "scale(1)";
+        card.style.boxShadow = "none";
+        card.style.backgroundColor = "rgba(15, 23, 42, 0.8)";
+      }
+    });
+
+    routeHighlightLayer.clearLayers();
+
+    if (window.currentRoutesData[index]) {
+      let coords = window.currentRoutesData[index];
+      let highlightLine = L.polyline(coords, {
+        color: "#3b82f6",
+        opacity: 1,
+        weight: 7,
+        lineCap: "round",
+        lineJoin: "round",
+        interactive: false, // <--- ADD THIS SO CLICKS PASS THROUGH TO THE MAP!
+      }).addTo(routeHighlightLayer);
+
+      try {
+        map.fitBounds(highlightLine.getBounds(), { padding: [50, 50] });
+      } catch (e) {}
+    }
+  };
+
+  // --- 5. ROUTING ENGINE ---
   async function geocodeAndRoute() {
     let startText = document.getElementById("start-location").value;
     let endText = document.getElementById("end-location").value;
@@ -327,8 +359,9 @@ endblock %} {% block head %}
         altLineOptions: {
           styles: [{ color: "#64748b", opacity: 0.7, weight: 6 }],
         },
+        // CHANGE THIS LINE TO GREY:
         lineOptions: {
-          styles: [{ color: "#3b82f6", opacity: 0.9, weight: 6 }],
+          styles: [{ color: "#64748b", opacity: 0.7, weight: 6 }],
         },
         createMarker: function () {
           return null;
@@ -340,18 +373,26 @@ endblock %} {% block head %}
       }).addTo(map);
 
       routingControl.on("routesfound", async function (e) {
+        let currentRequestId = ++window.routeRequestCount;
         let routes = e.routes;
+
+        window.currentRoutesData = routes.map((r) =>
+          r.coordinates.map((c) => [c.lat, c.lng]),
+        );
         document.getElementById("route-stats").innerHTML =
-          `<span style="color: #3b82f6;"><i class="fa-solid fa-spinner fa-spin"></i> Analyzing routes...</span>`;
+          `<span style="color: #3b82f6;"><i class="fa-solid fa-spinner fa-spin"></i> Analyzing ${routes.length} routes...</span>`;
 
         let evaluatedRoutes = [];
 
         for (let i = 0; i < routes.length; i++) {
           let route = routes[i];
-          let routeCoords = route.coordinates.map((c) => ({
-            lat: c.lat,
-            lon: c.lng,
-          }));
+          let routeCoords = [];
+          for (let j = 0; j < route.coordinates.length; j += 5) {
+            routeCoords.push({
+              lat: route.coordinates[j].lat,
+              lon: route.coordinates[j].lng,
+            });
+          }
 
           try {
             let response = await fetch("/api/evaluate_route", {
@@ -370,8 +411,12 @@ endblock %} {% block head %}
           } catch (error) {}
         }
 
+        if (currentRequestId !== window.routeRequestCount) return;
+
         let safest = evaluatedRoutes.reduce((prev, curr) =>
-          prev.safety.penalty_score < curr.safety.penalty_score ? prev : curr,
+          (prev.safety.penalty_score || 0) < (curr.safety.penalty_score || 0)
+            ? prev
+            : curr,
         );
         let fastest = evaluatedRoutes.reduce((prev, curr) =>
           prev.timeMin < curr.timeMin ? prev : curr,
@@ -379,7 +424,7 @@ endblock %} {% block head %}
 
         let html = `<b style="color: white;"><i class="fa-solid fa-code-compare"></i> Route Comparison</b><br><br>`;
 
-        evaluatedRoutes.forEach((r) => {
+        evaluatedRoutes.forEach((r, i) => {
           let isSafest = r === safest;
           let isFastest = r === fastest;
           let badges = "";
@@ -393,49 +438,49 @@ endblock %} {% block head %}
             : isFastest
               ? "#3b82f6"
               : "#64748b";
+          let safeScore =
+            r.safety.penalty_score !== undefined
+              ? r.safety.penalty_score
+              : "Error";
+          let hazardCount =
+            (r.safety.live_reports_intersected || 0) +
+            (r.safety.black_spots_intersected || 0);
 
-          // Note the class "route-card" and the custom data attributes!
           html += `
-                        <div class="route-card" data-time="${r.timeMin}" data-dist="${r.distanceKm}" style="padding: 12px; margin-bottom:12px; background: rgba(15, 23, 42, 0.8); border-left: 4px solid ${borderColor}; border-radius: 6px; transition: 0.3s; cursor: pointer;">
+                        <div class="route-card" onclick="selectRouteCard(${i})" data-time="${r.timeMin}" data-dist="${r.distanceKm}" style="padding: 12px; margin-bottom:12px; background: rgba(15, 23, 42, 0.8); border-left: 4px solid ${borderColor}; border-radius: 6px; transition: 0.3s; cursor: pointer;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 5px;">
                                 <span style="color: #f8fafc; font-weight:bold;">Route ${r.index}</span>
                                 <div>${badges}</div>
                             </div>
                             <span style="color: #cbd5e1; font-size:0.9rem;">
                                 <b>${r.timeMin} mins</b> (${r.distanceKm} km)<br>
-                                Risk Score: <b style="color:${isSafest ? "#10b981" : "#f43f5e"}">${r.safety.penalty_score}</b> 
-                                (Hazards: ${r.safety.live_reports_intersected + r.safety.black_spots_intersected})
+                                Risk Score: <b style="color:${isSafest ? "#10b981" : "#f43f5e"}">${safeScore}</b> 
+                                (Hazards: ${hazardCount})
                             </span>
                         </div>
                     `;
         });
 
-        html += `<div style="font-size: 0.8rem; color: #64748b; margin-top: 10px;"><i>Click grey routes on map to switch.</i></div>`;
+        html += `<div style="font-size: 0.8rem; color: #64748b; margin-top: 10px;"><i>Click a card above, or click grey routes on the map to switch.</i></div>`;
         document.getElementById("route-stats").innerHTML = html;
+
+        setTimeout(() => selectRouteCard(0), 100);
       });
 
-      // --- THE UI FLASHING LOGIC ---
-      // This fires whenever a user clicks an alternate line on the map
       routingControl.on("routeselected", function (e) {
-        // Dim all cards back to normal
-        document.querySelectorAll(".route-card").forEach((card) => {
-          card.style.transform = "scale(1)";
-          card.style.boxShadow = "none";
-          card.style.backgroundColor = "rgba(15, 23, 42, 0.8)";
-        });
-
-        // Match the clicked route's time/distance to the HTML card
         let matchTime = Math.round(e.route.summary.totalTime / 60);
         let matchDist = (e.route.summary.totalDistance / 1000).toFixed(1);
 
+        // Find the card that matches the route we just clicked on the map
         let activeCard = document.querySelector(
           `.route-card[data-time="${matchTime}"][data-dist="${matchDist}"]`,
         );
+
         if (activeCard) {
-          // Flash the card!
-          activeCard.style.transform = "scale(1.03)";
-          activeCard.style.boxShadow = "0 0 15px rgba(59, 130, 246, 0.4)";
-          activeCard.style.backgroundColor = "rgba(30, 41, 59, 1)";
+          // Find out which index this card is, and run our blue line function!
+          let cards = Array.from(document.querySelectorAll(".route-card"));
+          let clickedIndex = cards.indexOf(activeCard);
+          selectRouteCard(clickedIndex);
         }
       });
     } catch (error) {
@@ -445,6 +490,7 @@ endblock %} {% block head %}
     }
   }
 
+  // --- 6. STARTUP ---
   document.addEventListener("DOMContentLoaded", () => {
     loadBlackSpots();
     loadLiveReports();
