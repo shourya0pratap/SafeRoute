@@ -188,8 +188,21 @@ endblock %} {% block head %}
     let startText = document.getElementById("start-location").value;
     let endText = document.getElementById("end-location").value;
 
-    document.getElementById("route-stats").innerHTML =
-      "Calculating coordinates...";
+    document.getElementById("route-stats").innerHTML = `
+    Route Found!<br>
+    Distance: ${distanceKm} km<br>
+    Est. Time: ${timeMin} mins<br><br>
+    <div style="padding: 10px; background: rgba(0,0,0,0.2); border-left: 4px solid ${statusColor}; border-radius: 4px;">
+        <span style="color: ${statusColor}; font-weight: bold;">
+            <i class="fa-solid fa-triangle-exclamation"></i> ${safetyData.status}
+        </span><br>
+        <span style="color: #cbd5e1; font-size: 0.85rem;">
+            Risk Penalty: ${safetyData.penalty_score}<br>
+            Historical Spots Crossed: ${safetyData.black_spots_intersected}<br>
+            <b style="color: #3b82f6;">Live Hazards Crossed: ${safetyData.live_reports_intersected}</b>
+        </span>
+    </div>
+`;
 
     try {
       // Fetch coordinates for Origin
