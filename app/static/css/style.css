@@ -326,12 +326,27 @@ footer {
 
 /* --- SIDEBAR --- */
 #sidebar {
-  width: 380px;
+  width: 380px; /* Default starting width */
+  min-width: 300px; /* Prevents crushing the UI */
+  max-width: 600px; /* Prevents stretching too far over the map */
   background-color: var(--bg-card);
   box-shadow: 4px 0 15px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
   z-index: 1000;
+  position: relative;
+  /* THE RESIZE MAGIC */
+  resize: horizontal;
+  overflow: hidden; /* Required for CSS resize to work */
+  border-right: 2px solid #334155;
+}
+
+#sidebar h3 {
+  font-size: 1.2rem;
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.5rem;
 }
 
 .input-group {
@@ -475,4 +490,84 @@ footer {
   #map {
     height: 60vh;
   }
+}
+
+/* Transport Mode Buttons */
+.mode-btn {
+  flex: 1;
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: 0.3s;
+  font-size: 0.9rem;
+}
+.mode-btn:hover {
+  background: #334155;
+  color: white;
+}
+.mode-btn.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: white;
+}
+
+/* Dense Route Cards */
+.route-card {
+  background-color: #0f172a;
+  border: 1px solid #334155;
+  border-left: 5px solid #64748b;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 15px;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+.route-card.active-card {
+  background-color: #1e293b;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+  transform: scale(1.02);
+}
+.route-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #334155;
+  font-size: 0.8rem;
+  color: #cbd5e1;
+}
+.metric-box {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 6px;
+  border-radius: 4px;
+  text-align: center;
+}
+.metric-box span {
+  display: block;
+  font-size: 1rem;
+  font-weight: bold;
+  color: white;
+}
+
+#resizer {
+  width: 6px;
+  height: 100%;
+  position: absolute;
+  right: 0;
+  top: 0;
+  cursor: ew-resize; /* Shows the left-right drag arrow */
+  background-color: transparent;
+  z-index: 100;
+  transition: background-color 0.2s;
+}
+
+#resizer:hover,
+#resizer.active-resizer {
+  background-color: #3b82f6; /* Glows blue on hover/drag */
 }

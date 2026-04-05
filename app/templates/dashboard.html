@@ -1,6 +1,5 @@
 {% extends "layout.html" %} {% block title %}SafeRoute | Live Navigation{%
 endblock %} {% block head %}
-
 <link
   rel="stylesheet"
   href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -24,28 +23,52 @@ endblock %} {% block head %}
     padding-top: 70px;
   }
 
-  .sidebar {
-    width: 350px;
+  /* --- SIDEBAR CUSTOM RESIZER --- */
+  #sidebar {
+    width: 380px;
+    min-width: 320px;
+    max-width: 600px;
     background: #1e293b;
-    padding: 2rem;
-    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 2rem 1rem;
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
-    overflow-y: auto;
+    z-index: 1000;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
   }
-  .sidebar h3 {
+
+  #resizer {
+    width: 6px;
+    height: 100%;
+    position: absolute;
+    right: 0;
+    top: 0;
+    cursor: ew-resize;
+    background-color: transparent;
+    z-index: 100;
+    transition: background-color 0.2s;
+  }
+  #resizer:hover,
+  #resizer.active-resizer {
+    background-color: #3b82f6;
+  }
+
+  #sidebar h3 {
     font-size: 1.2rem;
     color: var(--primary);
     margin-bottom: 0.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     padding-bottom: 0.5rem;
+    margin-left: 1rem;
+    margin-right: 1rem;
   }
 
   .control-group {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    padding: 0 1rem;
   }
   .control-group label {
     font-size: 0.9rem;
@@ -60,6 +83,28 @@ endblock %} {% block head %}
     font-family: "Inter", sans-serif;
   }
 
+  /* Transport Mode Buttons */
+  .mode-btn {
+    flex: 1;
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: #94a3b8;
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: 0.3s;
+    font-size: 0.9rem;
+  }
+  .mode-btn:hover {
+    background: #334155;
+    color: white;
+  }
+  .mode-btn.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+  }
+
   .btn-update {
     background: var(--gradient);
     color: white;
@@ -69,9 +114,67 @@ endblock %} {% block head %}
     font-weight: bold;
     cursor: pointer;
     transition: 0.3s;
+    margin: 0 1rem;
   }
   .btn-update:hover {
     opacity: 0.9;
+  }
+
+  /* Dense Route Cards */
+  #route-stats {
+    padding: 0 1rem;
+    flex-grow: 1;
+    overflow-y: auto;
+  }
+  #route-stats::-webkit-scrollbar {
+    width: 6px;
+  }
+  #route-stats::-webkit-scrollbar-track {
+    background: #1e293b;
+  }
+  #route-stats::-webkit-scrollbar-thumb {
+    background: #475569;
+    border-radius: 10px;
+  }
+
+  .route-card {
+    background-color: #0f172a;
+    border: 1px solid #334155;
+    border-left: 5px solid #64748b;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 15px;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .route-card.active-card {
+    background-color: #1e293b;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+    transform: scale(1.02);
+  }
+  .route-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #334155;
+    font-size: 0.8rem;
+    color: #cbd5e1;
+  }
+  .metric-box {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 6px;
+    border-radius: 4px;
+    text-align: center;
+  }
+  .metric-box span {
+    display: block;
+    font-size: 1rem;
+    font-weight: bold;
+    color: white;
   }
 
   .map-area {
@@ -97,8 +200,35 @@ endblock %} {% block head %}
 </nav>
 
 <div class="dashboard-container">
-  <aside class="sidebar">
-    <h3><i class="fa-solid fa-route"></i> Route Planner</h3>
+  <aside id="sidebar">
+    <h3><i class="fa-solid fa-route"></i> Command Center</h3>
+
+    <div
+      class="transport-modes"
+      style="display: flex; gap: 10px; padding: 0 1rem"
+    >
+      <button
+        class="mode-btn active"
+        onclick="setTransportMode('driving')"
+        data-mode="driving"
+      >
+        <i class="fa-solid fa-car"></i> Car
+      </button>
+      <button
+        class="mode-btn"
+        onclick="setTransportMode('bike')"
+        data-mode="bike"
+      >
+        <i class="fa-solid fa-motorcycle"></i> Bike
+      </button>
+      <button
+        class="mode-btn"
+        onclick="setTransportMode('foot')"
+        data-mode="foot"
+      >
+        <i class="fa-solid fa-person-walking"></i> Walk
+      </button>
+    </div>
 
     <div class="control-group">
       <label for="start-location">Origin</label>
@@ -139,20 +269,23 @@ endblock %} {% block head %}
     </div>
 
     <button class="btn-update" onclick="geocodeAndRoute()">
-      <i class="fa-solid fa-location-arrow"></i> Find Safest Route
+      <i class="fa-solid fa-satellite-dish"></i> Evaluate Trajectories
     </button>
 
-    <div
-      id="route-stats"
-      style="
-        margin-top: 1rem;
-        color: #10b981;
-        font-weight: bold;
-        font-size: 0.9rem;
-      "
-    >
-      <i>Tip: Right-click anywhere on the map to report a live hazard!</i>
+    <div id="route-stats">
+      <div
+        style="
+          color: #10b981;
+          font-size: 0.9rem;
+          text-align: center;
+          margin-top: 20px;
+        "
+      >
+        <i>Tip: Right-click anywhere on the map to report a live hazard!</i>
+      </div>
     </div>
+
+    <div id="resizer"></div>
   </aside>
 
   <main class="map-area">
@@ -174,12 +307,58 @@ endblock %} {% block head %}
   var routingControl = null;
   var clusterLayer = L.layerGroup().addTo(map);
   var liveReportLayer = L.layerGroup().addTo(map);
-  var routeHighlightLayer = L.layerGroup().addTo(map); // <- This was the missing layer!
 
-  window.currentRoutesData = [];
+  // New Globals for Advanced Routing
+  window.currentTransportMode = "driving";
+  window.drawnPolylines = [];
   window.routeRequestCount = 0;
 
-  // --- 2. LIVE GPS & CROWDSOURCING ---
+  // --- 2. SIDEBAR RESIZER LOGIC ---
+  const sidebar = document.getElementById("sidebar");
+  const resizer = document.getElementById("resizer");
+  let isResizing = false;
+
+  resizer.addEventListener("mousedown", (e) => {
+    isResizing = true;
+    resizer.classList.add("active-resizer");
+    document.body.style.cursor = "ew-resize";
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!isResizing) return;
+    let newWidth = e.clientX;
+    if (newWidth >= 320 && newWidth <= 600) {
+      sidebar.style.width = newWidth + "px";
+    }
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (isResizing) {
+      isResizing = false;
+      resizer.classList.remove("active-resizer");
+      document.body.style.cursor = "default";
+    }
+  });
+
+  // --- 3. TRANSPORT MODES ---
+  function setTransportMode(mode) {
+    window.currentTransportMode = mode;
+    document
+      .querySelectorAll(".mode-btn")
+      .forEach((btn) => btn.classList.remove("active"));
+    document
+      .querySelector(`.mode-btn[data-mode="${mode}"]`)
+      .classList.add("active");
+
+    if (
+      document.getElementById("start-location").value &&
+      document.getElementById("end-location").value
+    ) {
+      geocodeAndRoute();
+    }
+  }
+
+  // --- 4. LIVE GPS & CROWDSOURCING ---
   function useCurrentLocation() {
     if (navigator.geolocation) {
       document.getElementById("start-location").value = "Locating...";
@@ -249,7 +428,7 @@ endblock %} {% block head %}
       });
   }
 
-  // --- 3. HISTORICAL ML CLUSTERS ---
+  // --- 5. HISTORICAL ML CLUSTERS ---
   function loadBlackSpots() {
     fetch("/api/clusters")
       .then((res) => res.json())
@@ -263,8 +442,10 @@ endblock %} {% block head %}
               : spot.Risk_Level === "Moderate"
                 ? "#f59e0b"
                 : "#10b981";
-
-          let dynamicRadius = parseFloat((300 + (Math.sqrt(spot.Total_Crashes) * 200)).toFixed(2));
+          // Square Root Scaling for Dynamic Radius
+          let dynamicRadius = parseFloat(
+            (300 + Math.sqrt(spot.Total_Crashes) * 200).toFixed(2),
+          );
 
           let circle = L.circle([spot.Latitude, spot.Longitude], {
             radius: dynamicRadius,
@@ -273,62 +454,29 @@ endblock %} {% block head %}
             fillOpacity: 0.5,
           }).addTo(clusterLayer);
 
-          let popupContent = `
+          circle.bindPopup(`
                         <div style="font-family: 'Inter', sans-serif; min-width: 150px;">
                             <h4 style="margin: 0; color: #333;">Cluster #${spot.Cluster_ID}</h4>
                             <p style="margin: 5px 0; color: ${color}; font-weight: bold;">${spot.Risk_Level} Risk Zone</p>
                             <p style="margin: 0; font-size: 12px; color: #666;">Total Crashes: ${spot.Total_Crashes}</p>
                             <p style="margin: 0; font-size: 10px; color: #888;">Radius: ${dynamicRadius}m</p>
                         </div>
-                    `;
-          circle.bindPopup(popupContent);
+                    `);
         });
       });
   }
 
-  // --- 4. BI-DIRECTIONAL UI SYNC ---
-  window.selectRouteCard = function (index) {
-    document.querySelectorAll(".route-card").forEach((card, i) => {
-      if (i === index) {
-        card.style.transform = "scale(1.03)";
-        card.style.boxShadow = "0 0 15px rgba(59, 130, 246, 0.4)";
-        card.style.backgroundColor = "rgba(30, 41, 59, 1)";
-      } else {
-        card.style.transform = "scale(1)";
-        card.style.boxShadow = "none";
-        card.style.backgroundColor = "rgba(15, 23, 42, 0.8)";
-      }
-    });
-
-    routeHighlightLayer.clearLayers();
-
-    if (window.currentRoutesData[index]) {
-      let coords = window.currentRoutesData[index];
-      let highlightLine = L.polyline(coords, {
-        color: "#3b82f6",
-        opacity: 1,
-        weight: 7,
-        lineCap: "round",
-        lineJoin: "round",
-        interactive: false, // <--- ADD THIS SO CLICKS PASS THROUGH TO THE MAP!
-      }).addTo(routeHighlightLayer);
-
-      try {
-        map.fitBounds(highlightLine.getBounds(), { padding: [50, 50] });
-      } catch (e) {}
-    }
-  };
-
-  // --- 5. ROUTING ENGINE ---
+  // --- 6. ADVANCED ROUTING ENGINE ---
   async function geocodeAndRoute() {
     let startText = document.getElementById("start-location").value;
     let endText = document.getElementById("end-location").value;
     let startLat, startLon, endLat, endLon;
 
     document.getElementById("route-stats").innerHTML =
-      "Calculating coordinates...";
+      `<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-satellite-dish fa-spin"></i> Uplinking to GPS Array...</div>`;
 
     try {
+      // Geocode Start
       if (startText.includes(",")) {
         let parts = startText.split(",");
         startLat = parseFloat(parts[0].trim());
@@ -341,7 +489,7 @@ endblock %} {% block head %}
         startLat = parseFloat(startData[0].lat);
         startLon = parseFloat(startData[0].lon);
       }
-
+      // Geocode End
       if (endText.includes(",")) {
         let parts = endText.split(",");
         endLat = parseFloat(parts[0].trim());
@@ -355,23 +503,30 @@ endblock %} {% block head %}
         endLon = parseFloat(endData[0].lon);
       }
 
-      if (routingControl) {
-        map.removeControl(routingControl);
+      // Cleanup old routing & lines
+      if (window.routingControl) map.removeControl(window.routingControl);
+      if (window.drawnPolylines && window.drawnPolylines.length > 0) {
+        window.drawnPolylines.forEach((item) => map.removeLayer(item.line));
+      }
+      window.drawnPolylines = [];
+
+      // Multi-Modal Dynamic Server Switch
+      let routingUrl = "https://routing.openstreetmap.de/routed-car/route/v1";
+      if (window.currentTransportMode === "bike") {
+        routingUrl = "https://routing.openstreetmap.de/routed-bike/route/v1";
+      } else if (window.currentTransportMode === "foot") {
+        routingUrl = "https://routing.openstreetmap.de/routed-foot/route/v1";
       }
 
-      routingControl = L.Routing.control({
+      window.routingControl = L.Routing.control({
         waypoints: [L.latLng(startLat, startLon), L.latLng(endLat, endLon)],
         router: L.Routing.osrmv1({
-          serviceUrl: "https://router.project-osrm.org/route/v1",
+          serviceUrl: routingUrl,
+          profile: "driving", // Keep this driving, the URL handles the actual transport mode
         }),
         showAlternatives: true,
-        altLineOptions: {
-          styles: [{ color: "#64748b", opacity: 0.7, weight: 6 }],
-        },
-        // CHANGE THIS LINE TO GREY:
-        lineOptions: {
-          styles: [{ color: "#64748b", opacity: 0.7, weight: 6 }],
-        },
+        altLineOptions: { styles: [{ opacity: 0 }] }, // Hide default lines
+        lineOptions: { styles: [{ opacity: 0 }] }, // Hide default lines
         createMarker: function () {
           return null;
         },
@@ -385,18 +540,14 @@ endblock %} {% block head %}
         let currentRequestId = ++window.routeRequestCount;
         let routes = e.routes;
 
-        window.currentRoutesData = routes.map((r) =>
-          r.coordinates.map((c) => [c.lat, c.lng]),
-        );
         document.getElementById("route-stats").innerHTML =
-          `<span style="color: #3b82f6;"><i class="fa-solid fa-spinner fa-spin"></i> Analyzing ${routes.length} routes...</span>`;
+          `<div style="text-align:center; padding: 20px;"><i class="fa-solid fa-circle-notch fa-spin"></i> Analyzing ${routes.length} Trajectories...</div>`;
 
         let evaluatedRoutes = [];
 
         for (let i = 0; i < routes.length; i++) {
           let route = routes[i];
           let routeCoords = [];
-          // Force a maximum of 50 calculation points to guarantee instant loading
           let stepSize = Math.max(1, Math.floor(route.coordinates.length / 50));
 
           for (let j = 0; j < route.coordinates.length; j += stepSize) {
@@ -415,94 +566,159 @@ endblock %} {% block head %}
             let safetyData = await response.json();
 
             evaluatedRoutes.push({
-              index: i + 1,
+              index: i,
+              routeData: route,
               distanceKm: (route.summary.totalDistance / 1000).toFixed(1),
               timeMin: Math.round(route.summary.totalTime / 60),
               safety: safetyData,
             });
-          } catch (error) {}
+          } catch (error) {
+            console.error(error);
+          }
         }
 
         if (currentRequestId !== window.routeRequestCount) return;
 
-        let safest = evaluatedRoutes.reduce((prev, curr) =>
-          (prev.safety.penalty_score || 0) < (curr.safety.penalty_score || 0)
-            ? prev
-            : curr,
-        );
-        let fastest = evaluatedRoutes.reduce((prev, curr) =>
-          prev.timeMin < curr.timeMin ? prev : curr,
-        );
+        // Tie-Breaker Logic
+        let safest = evaluatedRoutes.reduce((prev, curr) => {
+          let pScore = prev.safety.penalty_score || 0;
+          let cScore = curr.safety.penalty_score || 0;
+          if (pScore === cScore)
+            return prev.timeMin < curr.timeMin ? prev : curr;
+          return pScore < cScore ? prev : curr;
+        });
 
-        let html = `<b style="color: white;"><i class="fa-solid fa-code-compare"></i> Route Comparison</b><br><br>`;
+        let fastest = evaluatedRoutes.reduce((prev, curr) => {
+          if (prev.timeMin === curr.timeMin)
+            return parseFloat(prev.distanceKm) < parseFloat(curr.distanceKm)
+              ? prev
+              : curr;
+          return prev.timeMin < curr.timeMin ? prev : curr;
+        });
+
+        let html = `<div style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px;">Available Trajectories</div>`;
 
         evaluatedRoutes.forEach((r, i) => {
           let isSafest = r === safest;
           let isFastest = r === fastest;
-          let badges = "";
-          if (isSafest)
-            badges += `<span style="background:#10b981; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-right:4px;">Safest</span>`;
-          if (isFastest)
-            badges += `<span style="background:#3b82f6; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem;">Fastest</span>`;
+          let isOptimal = isSafest && isFastest;
 
-          let borderColor = isSafest
-            ? "#10b981"
-            : isFastest
-              ? "#3b82f6"
-              : "#64748b";
+          let routeColor = "#64748b";
+          let badgeHTML = "";
+          let glow = "";
+
+          if (isOptimal) {
+            routeColor = "#a855f7";
+            badgeHTML = `<span style="background:#a855f7; color:white; padding:3px 8px; border-radius:4px; font-size:0.7rem; font-weight:bold;">OPTIMAL</span>`;
+            glow = `box-shadow: 0 0 10px rgba(168, 85, 247, 0.2);`;
+          } else {
+            if (isSafest) {
+              routeColor = "#10b981";
+              badgeHTML += `<span style="background:#10b981; color:white; padding:3px 8px; border-radius:4px; font-size:0.7rem; margin-right:5px; font-weight:bold;"><i class="fa-solid fa-shield"></i> SAFEST</span>`;
+            }
+            if (isFastest) {
+              routeColor = "#3b82f6";
+              badgeHTML += `<span style="background:#3b82f6; color:white; padding:3px 8px; border-radius:4px; font-size:0.7rem; font-weight:bold;"><i class="fa-solid fa-bolt"></i> FASTEST</span>`;
+            }
+          }
+
+          // Draw Custom Map Lines
+          let latLngs = r.routeData.coordinates.map((c) => [c.lat, c.lng]);
+          let polyline = L.polyline(latLngs, {
+            color: routeColor,
+            weight: isSafest || isFastest ? 7 : 5,
+            opacity: isSafest || isFastest ? 0.9 : 0.5,
+            dashArray: isSafest || isFastest ? null : "10, 10",
+          }).addTo(map);
+
+          polyline.on("click", () => selectRouteCustom(i));
+          window.drawnPolylines.push({
+            line: polyline,
+            color: routeColor,
+            isMain: isSafest || isFastest,
+          });
+
+          // Generate UI Metrics
           let safeScore =
             r.safety.penalty_score !== undefined
               ? r.safety.penalty_score
-              : "Error";
+              : "ERR";
           let hazardCount =
             (r.safety.live_reports_intersected || 0) +
             (r.safety.black_spots_intersected || 0);
+          let co2 = Math.round(r.distanceKm * 0.12);
+          let fuel = (r.distanceKm / 15).toFixed(1);
 
           html += `
-                        <div class="route-card" onclick="selectRouteCard(${i})" data-time="${r.timeMin}" data-dist="${r.distanceKm}" style="padding: 12px; margin-bottom:12px; background: rgba(15, 23, 42, 0.8); border-left: 4px solid ${borderColor}; border-radius: 6px; transition: 0.3s; cursor: pointer;">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 5px;">
-                                <span style="color: #f8fafc; font-weight:bold;">Route ${r.index}</span>
-                                <div>${badges}</div>
+                        <div class="route-card" id="card-${i}" onclick="selectRouteCustom(${i})" style="border-left-color: ${routeColor}; ${glow}">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                <div>
+                                    <h3 style="margin:0; font-size: 1.2rem; color: white;">${r.timeMin} min</h3>
+                                    <span style="color: #94a3b8; font-size: 0.85rem;">Via Route ${i + 1} • ${r.distanceKm} km</span>
+                                </div>
+                                <div>${badgeHTML}</div>
                             </div>
-                            <span style="color: #cbd5e1; font-size:0.9rem;">
-                                <b>${r.timeMin} mins</b> (${r.distanceKm} km)<br>
-                                Risk Score: <b style="color:${isSafest ? "#10b981" : "#f43f5e"}">${safeScore}</b> 
-                                (Hazards: ${hazardCount})
-                            </span>
+                            
+                            <div class="route-metrics">
+                                <div class="metric-box">
+                                    <i class="fa-solid fa-triangle-exclamation" style="color: ${isSafest ? "#10b981" : "#f43f5e"};"></i> Hazards
+                                    <span>${hazardCount}</span>
+                                </div>
+                                <div class="metric-box">
+                                    <i class="fa-solid fa-shield-halved" style="color: ${isSafest ? "#10b981" : "#94a3b8"};"></i> Risk Score
+                                    <span style="color: ${isSafest ? "#10b981" : "white"};">${safeScore}</span>
+                                </div>
+                                ${
+                                  window.currentTransportMode === "driving"
+                                    ? `
+                                <div class="metric-box">
+                                    <i class="fa-solid fa-gas-pump"></i> Est. Fuel
+                                    <span>${fuel} L</span>
+                                </div>
+                                <div class="metric-box">
+                                    <i class="fa-solid fa-leaf" style="color: #2dd4bf;"></i> CO2
+                                    <span>${co2} kg</span>
+                                </div>`
+                                    : ""
+                                }
+                            </div>
                         </div>
                     `;
         });
 
-        html += `<div style="font-size: 0.8rem; color: #64748b; margin-top: 10px;"><i>Click a card above, or click grey routes on the map to switch.</i></div>`;
         document.getElementById("route-stats").innerHTML = html;
-
-        setTimeout(() => selectRouteCard(0), 100);
-      });
-
-      routingControl.on("routeselected", function (e) {
-        let matchTime = Math.round(e.route.summary.totalTime / 60);
-        let matchDist = (e.route.summary.totalDistance / 1000).toFixed(1);
-
-        // Find the card that matches the route we just clicked on the map
-        let activeCard = document.querySelector(
-          `.route-card[data-time="${matchTime}"][data-dist="${matchDist}"]`,
-        );
-
-        if (activeCard) {
-          // Find out which index this card is, and run our blue line function!
-          let cards = Array.from(document.querySelectorAll(".route-card"));
-          let clickedIndex = cards.indexOf(activeCard);
-          selectRouteCard(clickedIndex);
-        }
+        setTimeout(() => selectRouteCustom(0), 100);
       });
     } catch (error) {
-      console.error("Geocoding failed:", error);
+      console.error("Routing failed:", error);
       document.getElementById("route-stats").innerHTML =
-        `<span style="color: #f43f5e;">Routing failed: ${error}</span>`;
+        `<div style="color: #f43f5e; padding: 20px;">System Failure: ${error}</div>`;
     }
   }
 
-  // --- 6. STARTUP ---
+  // --- 7. BI-DIRECTIONAL UI SYNC ---
+  window.selectRouteCustom = function (index) {
+    document
+      .querySelectorAll(".route-card")
+      .forEach((c) => c.classList.remove("active-card"));
+    let selectedCard = document.getElementById(`card-${index}`);
+    if (selectedCard) selectedCard.classList.add("active-card");
+
+    window.drawnPolylines.forEach((item, idx) => {
+      if (idx === index) {
+        item.line.setStyle({ weight: 8, opacity: 1, dashArray: null });
+        item.line.bringToFront();
+        try {
+          map.fitBounds(item.line.getBounds(), { padding: [50, 50] });
+        } catch (e) {}
+      } else {
+        item.line.setStyle({ weight: 5, opacity: 0.4, dashArray: "10, 10" });
+        item.line.bringToBack();
+      }
+    });
+  };
+
+  // --- 8. STARTUP ---
   document.addEventListener("DOMContentLoaded", () => {
     loadBlackSpots();
     loadLiveReports();
