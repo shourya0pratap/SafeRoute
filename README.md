@@ -1,58 +1,97 @@
 # 🛡️ SafeRoute: Real-Time Road Accident Hotspot Detection
 
-**SafeRoute** is a safety-first navigation dashboard and data science pipeline that prioritizes human life over travel speed. Traditional GPS applications route drivers through the fastest possible path, often sending them blindly through high-frequency accident zones. SafeRoute solves this by combining historical crash data, unsupervised machine learning, and real-time routing algorithms to suggest mathematically safer alternative detours.
+SafeRoute is a safety-first navigation dashboard and ML pipeline that evaluates route risk using historical crash hotspots and live hazard reports.
 
-Developed by **Team Error_Logical** as a B.Tech Computer Science and Engineering Minor Project.
+## Tech Stack
 
----
+- Python 3.11+
+- Flask + Gunicorn
+- Pandas, NumPy, Scikit-learn
+- SQLite
+- Leaflet.js + OSRM
 
-## ✨ Key Features
+## Local Setup
 
-- **Dynamic Spatial Bounding:** Replaces static radius checks with a dynamic mathematical footprint. The geographical collision radius of each danger zone scales linearly based on its historical accident density `(Base 300m + (Crashes × 50m))`.
-- **Machine Learning Integration:** Utilizes **K-Means Clustering (k=500)** to group over 5,000 geocoded accident records into precise "macro-clusters" across the Indian subcontinent.
-- **Safety-Aware Routing:** Intercepts the **OSRM (Open Source Routing Machine)** API to evaluate standard routes against known Black Spots using Haversine distance calculations.
-- **Real-Time Hazard Crowdsourcing:** Features a live SQLite database allowing users to drop temporary pins for sudden hazards (Traffic Jams, Collisions, etc.), instantly updating the routing penalty engine.
-- **Interactive Web UI:** Built with **Leaflet.js** and **Flask**, featuring a sleek dark-mode dashboard with bi-directional syncing (clicking map layers dynamically updates sidebar UI metrics).
-
----
-
-## 🛠️ Tech Stack
-
-**Backend & Data Science:**
-
-- **Python 3.x:** Core pipeline logic.
-- **Pandas & NumPy:** Data ingestion, coordinate validation, and mathematical modeling.
-- **Scikit-Learn:** Unsupervised K-Means clustering.
-- **Flask:** RESTful API server.
-- **SQLite:** Lightweight database for live hazard crowdsourcing.
-
-**Frontend:**
-
-- **HTML5, CSS3, JavaScript (Vanilla):** Custom dashboard UI.
-- **Leaflet.js & CARTO:** Map rendering and interactive geometry.
-- **OSRM API:** Live GPS waypoints and turn-by-turn routing data.
-
----
-
-## 📂 Project Structure
-
-```text
-SafeRoute/
-│
-├── app.py                     # Main Flask Application Server
-├── fix_coastline.py           # Bounding-box script to correct oceanic GPS drift
-├── static/
-│   ├── style.css              # Dark-mode dashboard UI styles
-│   ├── app.js                 # Leaflet map logic and OSRM integration
-│   └── favicon.svg
-├── templates/
-│   ├── layout.html            # Base Jinja2 template
-│   └── dashboard.html         # Main map interface
-├── data/
-│   ├── raw/                   # Unstructured & synthetic geocoded datasets
-│   └── processed/             # Cleaned datasets and finalized cluster centroids
-└── src/
-    ├── cleaner.py             # Data preprocessing and null handling
-    ├── model.py               # K-Means clustering engine
-    └── safety_engine.py       # Haversine collision math and risk penalty calculator
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python run.py
 ```
+
+## Production Runtime
+
+Run with Gunicorn (WSGI entrypoint):
+
+```bash
+gunicorn --workers 4 --bind 0.0.0.0:5000 wsgi:app
+```
+
+## Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `FLASK_DEBUG` | Enable debug mode | `false` |
+| `HOST` | Flask bind host | `0.0.0.0` |
+| `PORT` | Flask/Gunicorn port | `5000` |
+| `SECRET_KEY` | Flask secret key | `unsafe-dev-secret-change-me` |
+| `SAFEROUTE_DATA_DIR` | Base data directory | `<repo>/data` |
+| `SAFEROUTE_CLUSTERS_FILE` | Active clusters CSV path | `<data>/processed/cluster_centroids.csv` |
+| `SAFEROUTE_LIVE_DB_PATH` | SQLite live reports path | `<data>/live_reports.db` |
+| `SAFEROUTE_ROUTE_MAX_WAYPOINTS` | Max waypoints accepted by `/api/evaluate_route` | `500` |
+| `SAFEROUTE_REPORT_RATE_LIMIT_WINDOW_SECONDS` | Report rate-limit window | `60` |
+| `SAFEROUTE_REPORT_RATE_LIMIT_MAX_REQUESTS` | Max report requests per IP in window | `20` |
+| `SAFEROUTE_REQUIRE_REPORT_API_KEY` | Require API key on `/api/report` | `false` |
+| `SAFEROUTE_REPORT_API_KEY` | API key value when enabled | empty |
+| `SAFEROUTE_ENFORCE_HTTPS` | Reject non-HTTPS API requests | `false` |
+
+## Data + Model Pipeline
+
+Run a versioned pipeline:
+
+```bash
+python -m src.pipeline_runner --k 500
+```
+
+- Writes cleaned data to `data/processed/accidents_clean.csv`
+- Writes versioned centroids to `data/processed/versions/`
+- Promotes active centroids to `data/processed/cluster_centroids.csv`
+- Stores run metadata in `data/processed/model_manifest.json`
+
+Rollback to a previous model file:
+
+```bash
+python -m src.pipeline_runner --rollback data/processed/versions/cluster_centroids_<VERSION>.csv
+```
+
+## Testing and CI
+
+Run tests:
+
+```bash
+pytest -q
+```
+
+CI workflow (`.github/workflows/ci.yml`) runs:
+- Unit/integration tests
+- Dependency vulnerability audit (`pip-audit`)
+
+## Release Checklist (v1)
+
+- [ ] Define launch region and target traffic assumptions
+- [ ] Set production environment variables and secrets
+- [ ] Run versioned model pipeline and verify output quality
+- [ ] Enable HTTPS at load balancer/reverse proxy
+- [ ] Set API abuse controls (`SAFEROUTE_REQUIRE_REPORT_API_KEY`, rate limits)
+- [ ] Deploy behind Gunicorn + reverse proxy
+- [ ] Verify `/healthz` and monitoring dashboards
+- [ ] Run CI and confirm all checks pass
+- [ ] Perform staged rollout and monitor error/latency metrics
+
+## API Endpoints
+
+- `GET /healthz`
+- `GET /api/clusters`
+- `POST /api/evaluate_route`
+- `POST /api/report`
+- `GET /api/live_reports`
