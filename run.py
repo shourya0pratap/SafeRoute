@@ -1,7 +1,9 @@
 from app import app
 
-if __name__ == '__main__':
-    # debug = True means the server will automatically update if we change code
-    # port = 5000 is standard for Flask apps
-    print("Starting SafeRoute Local Server...")
-    app.run(debug=True, port=5000)
+if __name__ == "__main__":
+    print("Starting SafeRoute Server...")
+    app.run(
+        host=app.config["HOST"],
+        port=app.config["PORT"],
+        debug=app.config["DEBUG"],
+    )
