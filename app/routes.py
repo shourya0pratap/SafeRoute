@@ -1,5 +1,4 @@
 import logging
-import os
 import sqlite3
 import time
 from collections import defaultdict, deque
@@ -170,8 +169,8 @@ def evaluate_route():
         )
     except FileNotFoundError:
         return _json_error("Centroids file not found.", 404)
-    except ValueError as exc:
-        return _json_error(str(exc), 400)
+    except ValueError:
+        return _json_error("Invalid request payload.", 400)
 
 
 @app.route("/api/report", methods=["POST"])
@@ -207,8 +206,8 @@ def report_accident():
             conn.commit()
 
         return jsonify({"status": "success"}), 201
-    except ValueError as exc:
-        return _json_error(str(exc), 400)
+    except ValueError:
+        return _json_error("Invalid request payload.", 400)
 
 
 @app.route("/api/live_reports", methods=["GET"])
