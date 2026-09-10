@@ -300,9 +300,12 @@ endblock %} {% block head %}
   // --- 1. GLOBALS & MAP INIT ---
   var map = L.map("live-map").setView([28.4595, 77.0266], 11);
 
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: "&copy; CARTO",
-  }).addTo(map);
+  L.tileLayer(
+    "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_34fb_1_1aaebdaa0fa23d326a476e5e",
+    {
+      attribution: "&copy; CARTO",
+    },
+  ).addTo(map);
 
   var routingControl = null;
   var clusterLayer = L.layerGroup().addTo(map);
