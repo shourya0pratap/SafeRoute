@@ -4,11 +4,6 @@ __pycache__/
 venv/
 env/
 
-# Data
-data/raw/*.csv
-data/processed/*.csv
-data/*.db
-
 # IDEs
 .vscode/
 .idea/
